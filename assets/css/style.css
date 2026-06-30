@@ -1,11 +1,11 @@
 /* =========================================================================
-   AUDIT TEKNIKAL AMBULANS — Design System
-   JKN Kedah · Borang Audit Digital
+   AUDIT TEKNIKAL AMBULANS â€” Design System
+   JKN Kedah Â· Borang Audit Digital
 
    Design direction: clinical-field tool. The palette runs from a deep
    teal (trust / public health) to an ambulance-amber accent. The single
-   signature element is the "Compliance Spectrum" — a 6-segment gauge
-   that mirrors the official scoring scale (Cemerlang → Gagal) and
+   signature element is the "Compliance Spectrum" â€” a 6-segment gauge
+   that mirrors the official scoring scale (Cemerlang â†’ Gagal) and
    reappears on the success screen, the PDF and the dashboard, so the
    one number that matters in this whole app always renders the same way.
    ========================================================================= */
@@ -35,7 +35,7 @@
   --color-danger-tint: #FBE8E5;
   --color-warning: #E8A23B;
 
-  /* --- Compliance spectrum (Cemerlang → Gagal) --- */
+  /* --- Compliance spectrum (Cemerlang â†’ Gagal) --- */
   --cat-cemerlang: #0E8C6B;
   --cat-baik: #4FA37C;
   --cat-memuaskan: #9CAA4D;
@@ -759,4 +759,28 @@ table.data-table tr:hover { background: var(--color-surface-sunken); }
 
 @media (min-width: 600px) {
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Star Rating                                                             */
+/* ---------------------------------------------------------------------- */
+.star-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.star-btn {
+  font-size: 36px;
+  background: none;
+  border: none;
+  color: var(--color-border-strong);
+  cursor: pointer;
+  transition: color .15s ease, transform .12s ease;
+  line-height: 1;
+  padding: 0 4px;
+}
+.star-btn:hover, .star-btn.is-selected {
+  color: var(--color-accent);
+  transform: scale(1.15);
 }
