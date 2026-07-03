@@ -1,23 +1,37 @@
 /**
- * form.js — Audit wizard
- * Changes: single auditor, re-audit mode, star rating on result
+ * form.js — Audit wizard v3
+ * Steps: Maklumat → Status Ambulans → A → B → C → Ringkasan → Semak
  */
 
+// ─────────────────────────────────────────────────────────────────────────
+// ⚠️  EDIT THIS: question numbers that become "Tidak Berkenaan" when
+//     "Ambulans tiada di lapangan" is selected.
+//     Example: const TB_WHEN_TIADA = [1, 4, 5, 7, 8, 11, 12];
+// ─────────────────────────────────────────────────────────────────────────
+const TB_WHEN_TIADA = [];
+
+const TB_VAL = "TIDAK_BERKENAAN";
+
 const STATE = {
-  auditType: "audit", // "audit" | "reaudit"
+  auditType: "audit",
   masterData: { daerah: [], klinikByDaerah: {} },
-  header: { daerah:"", klinik:"", namaPPP:"", auditorName:"", tarikhAudit:"" },
+  header: { daerah:"", klinik:"", namaPPP:"", tarikhAudit:"" },
+  ambulansStatus: null,   // "bersedia" | "tiada"
+  ambulansSebab: "",
   answers: {},
+  ringkasan: { kelebihan:"", kekurangan:"", cadangan:"", penambahbaikan:"" },
   currentStep: 0,
   result: null
 };
 
 const STEPS = [
-  { key:"info",    label:"Maklumat" },
-  { key:"section", sectionIndex:0, label:"A" },
-  { key:"section", sectionIndex:1, label:"B" },
-  { key:"section", sectionIndex:2, label:"C" },
-  { key:"review",  label:"Semak" }
+  { key:"info",      label:"Maklumat" },
+  { key:"ambulans",  label:"Status"   },
+  { key:"section",   sectionIndex:0, label:"A" },
+  { key:"section",   sectionIndex:1, label:"B" },
+  { key:"section",   sectionIndex:2, label:"C" },
+  { key:"ringkasan", label:"Ringkasan" },
+  { key:"review",    label:"Semak"    }
 ];
 
 function todayISO() {
@@ -28,8 +42,11 @@ function todayDisplay() {
   const d = new Date();
   return String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0")+"/"+d.getFullYear();
 }
+function isTB(qNo) {
+  return STATE.ambulansStatus === "tiada" && TB_WHEN_TIADA.includes(qNo);
+}
 
-/* ── Init ──────────────────────────────────────────────────────────── */
+/* ── Init ─────────────────────────────────────────────────────────── */
 async function init() {
   const params = new URLSearchParams(location.search);
   STATE.auditType = params.get("type") === "reaudit" ? "reaudit" : "audit";
@@ -52,17 +69,19 @@ async function init() {
   goToStep(0);
 }
 
-/* ── Progress ──────────────────────────────────────────────────────── */
+/* ── Progress ─────────────────────────────────────────────────────── */
 function renderStepPills() {
   document.getElementById("step-pills").innerHTML = STEPS.map((s,i) =>
     `<div class="step-pill" data-step="${i}">${s.label}</div>`).join("");
 }
 function updateProgress() {
-  const answered = Object.values(STATE.answers).filter(a => a.penilaian).length;
+  const nonTB = Object.entries(STATE.answers).filter(([no]) => !isTB(Number(no)));
+  const answered = nonTB.filter(([,a]) => a.penilaian && a.penilaian !== TB_VAL).length;
+  const total = nonTB.length;
   const marks = totalMarks();
-  document.getElementById("progress-fill").style.width = Math.round(answered/TOTAL_QUESTIONS*100)+"%";
+  document.getElementById("progress-fill").style.width = total ? Math.round(answered/total*100)+"%" : "0%";
   document.getElementById("progress-label").textContent = "Langkah "+(STATE.currentStep+1)+" / "+STEPS.length;
-  document.getElementById("progress-score").textContent = marks+"/"+TOTAL_QUESTIONS;
+  document.getElementById("progress-score").textContent = marks+"/"+(total||TOTAL_QUESTIONS);
   document.querySelectorAll(".step-pill").forEach((el,i) => {
     el.classList.toggle("is-active", i===STATE.currentStep);
     el.classList.toggle("is-done", i<STATE.currentStep);
@@ -72,60 +91,73 @@ function totalMarks() {
   return Object.values(STATE.answers).filter(a => a.penilaian==="YA").length;
 }
 
-/* ── Navigation ────────────────────────────────────────────────────── */
+/* ── Apply TB status to all relevant answers ──────────────────────── */
+function applyTBStatus() {
+  AUDIT_SECTIONS.forEach(sec => sec.questions.forEach(q => {
+    if (isTB(q.no)) {
+      STATE.answers[q.no].penilaian = TB_VAL;
+      STATE.answers[q.no].tindakSusul = TB_VAL;
+    } else if (STATE.answers[q.no].penilaian === TB_VAL) {
+      // If user switched back to "bersedia", reset TB answers
+      STATE.answers[q.no].penilaian = null;
+      STATE.answers[q.no].tindakSusul = null;
+    }
+  }));
+}
+
+/* ── Navigation ───────────────────────────────────────────────────── */
 function goToStep(n) {
   STATE.currentStep = n;
-  const container = document.getElementById("step-container");
-  container.innerHTML = "";
+  const c = document.getElementById("step-container");
+  c.innerHTML = "";
   const step = STEPS[n];
-  if (step.key==="info") renderInfoStep(container);
-  else if (step.key==="section") renderSectionStep(container, step.sectionIndex);
-  else if (step.key==="review") renderReviewStep(container);
+  if      (step.key==="info")      renderInfoStep(c);
+  else if (step.key==="ambulans")  renderAmbulanStep(c);
+  else if (step.key==="section")   renderSectionStep(c, step.sectionIndex);
+  else if (step.key==="ringkasan") renderRingkasanStep(c);
+  else if (step.key==="review")    renderReviewStep(c);
   updateProgress();
   window.scrollTo({ top:0, behavior:"smooth" });
 }
 function nextStep() {
   if (STATE.currentStep===0 && !validateInfo()) return;
+  if (STEPS[STATE.currentStep].key==="ambulans" && !validateAmbulan()) return;
   if (STEPS[STATE.currentStep].key==="section") {
     const si = STEPS[STATE.currentStep].sectionIndex;
-    if (!AUDIT_SECTIONS[si].questions.every(q => STATE.answers[q.no].penilaian)) {
-      toast("Sila jawab semua soalan dalam bahagian ini.", "error"); return;
-    }
+    const unanswered = AUDIT_SECTIONS[si].questions.filter(q => !isTB(q.no) && !STATE.answers[q.no].penilaian);
+    if (unanswered.length) { toast("Sila jawab semua soalan dalam bahagian ini.", "error"); return; }
   }
   if (STATE.currentStep < STEPS.length-1) goToStep(STATE.currentStep+1);
 }
 function prevStep() { if (STATE.currentStep>0) goToStep(STATE.currentStep-1); }
 
-/* ── Step 0: Maklumat Am ───────────────────────────────────────────── */
+/* ── Step 0: Maklumat Am ──────────────────────────────────────────── */
 function renderInfoStep(c) {
   c.insertAdjacentHTML("beforeend", `
     <div class="card">
       <h2 style="margin-bottom:14px;">Maklumat Am</h2>
-      <div class="field"><label>Daerah</label>
-        <select id="f-daerah"><option value="">— Pilih Daerah —</option>
+      <div class="field"><label for="f-daerah">Daerah</label>
+        <select id="f-daerah">
+          <option value="">— Pilih Daerah —</option>
           ${STATE.masterData.daerah.map(d=>`<option value="${d}" ${STATE.header.daerah===d?"selected":""}>${d}</option>`).join("")}
         </select>
       </div>
-      <div class="field"><label>Klinik Dilawati</label>
+      <div class="field"><label for="f-klinik">Klinik Dilawati</label>
         <select id="f-klinik"><option value="">— Pilih Daerah dahulu —</option></select>
       </div>
-      <div class="field"><label>Nama PPP</label>
+      <div class="field"><label for="f-nama-ppp">Nama PPP / Auditor</label>
         <input type="text" id="f-nama-ppp" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.namaPPP}">
-      </div>
-      <div class="field"><label>Nama Auditor</label>
-        <input type="text" id="f-nama-auditor" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.auditorName}">
+        <div class="field-hint">Digunakan sebagai nama PPP dan nama auditor. Akan ditukar huruf besar secara automatik.</div>
       </div>
       <div class="field"><label>Tarikh Audit</label>
         <input type="text" class="input-readonly" value="${todayDisplay()}" readonly>
-        <div class="field-hint">Diisi automatik — tarikh hari ini.</div>
       </div>
     </div>
-    <div class="btn-row"><button class="btn btn-primary btn-block" id="btn-next">Mula Audit →</button></div>
+    <div class="btn-row"><button class="btn btn-primary btn-block" id="btn-next">Seterusnya →</button></div>
   `);
 
   const daerahSel = document.getElementById("f-daerah");
   const klinikSel = document.getElementById("f-klinik");
-
   function refreshKlinik(keep) {
     const list = STATE.masterData.klinikByDaerah[daerahSel.value] || [];
     klinikSel.innerHTML = `<option value="">— Pilih Klinik —</option>` +
@@ -133,36 +165,107 @@ function renderInfoStep(c) {
     klinikSel.disabled = !list.length;
   }
   if (STATE.header.daerah) refreshKlinik(STATE.header.klinik);
-
   daerahSel.addEventListener("change", () => { STATE.header.daerah=daerahSel.value; STATE.header.klinik=""; refreshKlinik(null); });
   klinikSel.addEventListener("change", () => { STATE.header.klinik=klinikSel.value; });
 
-  ["f-nama-ppp","f-nama-auditor"].forEach(id => {
-    const el = document.getElementById(id);
-    el.addEventListener("input", () => {
-      const p = el.selectionStart; el.value = el.value.toUpperCase(); el.setSelectionRange(p,p);
-      if (id==="f-nama-ppp") STATE.header.namaPPP=el.value;
-      else STATE.header.auditorName=el.value;
-    });
+  const namaPPP = document.getElementById("f-nama-ppp");
+  namaPPP.addEventListener("input", () => {
+    const p = namaPPP.selectionStart; namaPPP.value = namaPPP.value.toUpperCase(); namaPPP.setSelectionRange(p,p);
+    STATE.header.namaPPP = namaPPP.value;
   });
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
 function validateInfo() {
-  if (!STATE.header.daerah) { toast("Sila pilih Daerah.","error"); return false; }
-  if (!STATE.header.klinik) { toast("Sila pilih Klinik.","error"); return false; }
-  if (!STATE.header.namaPPP.trim()) { toast("Sila isi Nama PPP.","error"); return false; }
-  if (!STATE.header.auditorName.trim()) { toast("Sila isi Nama Auditor.","error"); return false; }
+  if (!STATE.header.daerah)       { toast("Sila pilih Daerah.","error"); return false; }
+  if (!STATE.header.klinik)       { toast("Sila pilih Klinik.","error"); return false; }
+  if (!STATE.header.namaPPP.trim()){ toast("Sila isi Nama PPP / Auditor.","error"); return false; }
   return true;
 }
 
-/* ── Steps 1-3: Questions ──────────────────────────────────────────── */
+/* ── Step 1: Status Ambulans ──────────────────────────────────────── */
+function renderAmbulanStep(c) {
+  c.insertAdjacentHTML("beforeend", `
+    <div class="card">
+      <h2 style="margin-bottom:6px;">Status Ambulans</h2>
+      <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:18px;">
+        Sila pilih status ambulans sebelum meneruskan audit.
+      </p>
+
+      <div class="ambulans-option ${STATE.ambulansStatus==="bersedia"?"is-selected":""}" id="opt-bersedia" tabindex="0" role="button">
+        <div class="ambulans-option__icon">🚑</div>
+        <div>
+          <div class="ambulans-option__title">Ambulans bersedia di lapangan</div>
+          <div class="ambulans-option__desc">Audit penuh boleh dijalankan</div>
+        </div>
+        <div class="ambulans-option__check">✓</div>
+      </div>
+
+      <div class="ambulans-option ${STATE.ambulansStatus==="tiada"?"is-selected":""}" id="opt-tiada" tabindex="0" role="button" style="margin-top:10px;">
+        <div class="ambulans-option__icon">🚫</div>
+        <div>
+          <div class="ambulans-option__title">Ambulans tiada di lapangan</div>
+          <div class="ambulans-option__desc">Sebahagian soalan tidak berkenaan</div>
+        </div>
+        <div class="ambulans-option__check">✓</div>
+      </div>
+
+      <div id="sebab-wrap" style="display:${STATE.ambulansStatus==="tiada"?"block":"none"};margin-top:14px;">
+        <div class="field">
+          <label for="f-sebab">Sebab Ambulans Tiada</label>
+          <textarea id="f-sebab" placeholder="Contoh: Ambulans dalam penyelenggaraan, dihantar ke hospital..." style="min-height:80px;width:100%;border-radius:8px;border:1.5px solid var(--color-border-strong);padding:10px 12px;font-family:inherit;font-size:14px;">${STATE.ambulansSebab}</textarea>
+        </div>
+        ${TB_WHEN_TIADA.length ? `
+        <div class="alert" style="background:var(--color-primary-tint);border-left:4px solid var(--color-primary);border-radius:8px;padding:10px 14px;font-size:13px;">
+          <strong>Soalan tidak berkenaan akan dilangkau:</strong><br>
+          ${TB_WHEN_TIADA.map(n=>"Soalan "+n).join(", ")}
+        </div>` : `
+        <div class="alert" style="background:#fff8e1;border-left:4px solid #f2a93b;border-radius:8px;padding:10px 14px;font-size:13px;">
+          ⚠️ Senarai soalan tidak berkenaan belum ditetapkan. Edit <strong>TB_WHEN_TIADA</strong> dalam form.js.
+        </div>`}
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btn-back">← Kembali</button>
+      <button class="btn btn-primary" id="btn-next">Mula Audit →</button>
+    </div>
+  `);
+
+  function selectOption(val) {
+    STATE.ambulansStatus = val;
+    document.getElementById("opt-bersedia").classList.toggle("is-selected", val==="bersedia");
+    document.getElementById("opt-tiada").classList.toggle("is-selected", val==="tiada");
+    document.getElementById("sebab-wrap").style.display = val==="tiada" ? "block" : "none";
+    applyTBStatus();
+  }
+  document.getElementById("opt-bersedia").addEventListener("click", () => selectOption("bersedia"));
+  document.getElementById("opt-tiada").addEventListener("click", () => selectOption("tiada"));
+  const sebabEl = document.getElementById("f-sebab");
+  if (sebabEl) sebabEl.addEventListener("input", e => { STATE.ambulansSebab = e.target.value; });
+  document.getElementById("btn-back").addEventListener("click", prevStep);
+  document.getElementById("btn-next").addEventListener("click", nextStep);
+}
+function validateAmbulan() {
+  if (!STATE.ambulansStatus) { toast("Sila pilih status ambulans.","error"); return false; }
+  if (STATE.ambulansStatus==="tiada" && !STATE.ambulansSebab.trim()) {
+    toast("Sila nyatakan sebab ambulans tiada di lapangan.","error"); return false;
+  }
+  return true;
+}
+
+/* ── Steps 2-4: Questions ─────────────────────────────────────────── */
 function renderSectionStep(c, si) {
   const sec = AUDIT_SECTIONS[si];
+  const tbCount = sec.questions.filter(q => isTB(q.no)).length;
+
   c.insertAdjacentHTML("beforeend", `
     <div class="section-divider">
       <div class="section-divider__badge">${sec.code}</div>
-      <div><div class="section-divider__title">${sec.title}</div>
-      <div class="section-divider__count">${sec.questions.length} soalan</div></div>
+      <div>
+        <div class="section-divider__title">${sec.title}</div>
+        <div class="section-divider__count">
+          ${sec.questions.length} soalan${tbCount ? ` · <span style="color:var(--color-text-faint)">${tbCount} tidak berkenaan</span>` : ""}
+        </div>
+      </div>
     </div>
     <div id="q-list"></div>
     <div class="btn-row">
@@ -170,10 +273,30 @@ function renderSectionStep(c, si) {
       <button class="btn btn-primary" id="btn-next">Seterusnya →</button>
     </div>
   `);
+
   const list = document.getElementById("q-list");
-  sec.questions.forEach(q => list.appendChild(buildQuestionCard(q)));
+  sec.questions.forEach(q => {
+    if (isTB(q.no)) {
+      list.appendChild(buildTBCard(q));
+    } else {
+      list.appendChild(buildQuestionCard(q));
+    }
+  });
   document.getElementById("btn-back").addEventListener("click", prevStep);
   document.getElementById("btn-next").addEventListener("click", nextStep);
+}
+
+function buildTBCard(q) {
+  const card = document.createElement("div");
+  card.className = "q-card q-card--tb";
+  card.innerHTML = `
+    <div class="q-card__head">
+      <div class="q-card__no" style="background:var(--color-surface-sunken);color:var(--color-text-faint);">${q.no}</div>
+      <div class="q-card__text" style="color:var(--color-text-faint);">${q.text}</div>
+    </div>
+    <div class="tb-badge">⊘ Tidak Berkenaan — Ambulans Tiada di Lapangan</div>
+  `;
+  return card;
 }
 
 function buildQuestionCard(q) {
@@ -195,7 +318,9 @@ function buildQuestionCard(q) {
       <button type="button" class="toggle-btn choice-perlu" data-val="PERLU">Perlu</button>
       <button type="button" class="toggle-btn choice-tidak_perlu" data-val="TIDAK_PERLU">Tidak Perlu</button>
     </div>
-    <div class="q-card__catatan"><textarea placeholder="Catatan / bukti penemuan...">${ans.catatan}</textarea></div>
+    <div class="q-card__catatan">
+      <textarea placeholder="Catatan / bukti penemuan...">${ans.catatan}</textarea>
+    </div>
     <div class="photo-zone">
       <div class="photo-thumbs"></div>
       <label class="photo-add-btn">📷 Tambah Foto
@@ -206,8 +331,7 @@ function buildQuestionCard(q) {
 
   card.querySelectorAll('[data-group="penilaian"] .toggle-btn').forEach(btn => {
     btn.addEventListener("click", () => {
-      ans.penilaian = btn.dataset.val;
-      syncGroup(card,"penilaian");
+      ans.penilaian=btn.dataset.val; syncGroup(card,"penilaian");
       card.classList.toggle("is-answered-ya", ans.penilaian==="YA");
       card.classList.toggle("is-answered-tidak", ans.penilaian==="TIDAK");
       updateProgress();
@@ -221,7 +345,6 @@ function buildQuestionCard(q) {
   card.classList.toggle("is-answered-tidak", ans.penilaian==="TIDAK");
 
   card.querySelector("textarea").addEventListener("input", e => { ans.catatan=e.target.value; });
-
   renderThumbs(card, q.no);
   card.querySelector('input[type="file"]').addEventListener("change", async e => {
     const files = Array.from(e.target.files||[]);
@@ -232,17 +355,15 @@ function buildQuestionCard(q) {
         catch(err) { console.error(err); }
       }
     });
-    renderThumbs(card, q.no);
-    e.target.value="";
+    renderThumbs(card, q.no); e.target.value="";
   });
   return card;
 }
 
 function syncGroup(card, group) {
   const val = STATE.answers[Number(card.dataset.qno)][group];
-  card.querySelectorAll(`[data-group="${group}"] .toggle-btn`).forEach(btn => {
-    btn.classList.toggle("is-selected", btn.dataset.val===val);
-  });
+  card.querySelectorAll(`[data-group="${group}"] .toggle-btn`).forEach(btn =>
+    btn.classList.toggle("is-selected", btn.dataset.val===val));
 }
 
 function renderThumbs(card, qNo) {
@@ -253,61 +374,138 @@ function renderThumbs(card, qNo) {
       <img src="${p.dataUrl}" alt="Foto ${i+1}">
       <button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>
     </div>`).join("");
-  wrap.querySelectorAll(".photo-thumb__remove").forEach(btn => {
-    btn.addEventListener("click", () => { ans.photos.splice(Number(btn.dataset.idx),1); renderThumbs(card,qNo); });
-  });
+  wrap.querySelectorAll(".photo-thumb__remove").forEach(btn =>
+    btn.addEventListener("click", () => { ans.photos.splice(Number(btn.dataset.idx),1); renderThumbs(card,qNo); }));
 }
 
 function compressImage(file, maxDim=1280, quality=0.72) {
-  return new Promise((res, rej) => {
-    const img = new Image(), reader = new FileReader();
-    reader.onerror = rej;
-    reader.onload = () => {
-      img.onerror = rej;
-      img.onload = () => {
-        let {width:w, height:h} = img;
-        if (w>h && w>maxDim) { h=Math.round(h*maxDim/w); w=maxDim; }
-        else if (h>maxDim) { w=Math.round(w*maxDim/h); h=maxDim; }
-        const canvas = document.createElement("canvas");
-        canvas.width=w; canvas.height=h;
+  return new Promise((res,rej) => {
+    const img=new Image(), reader=new FileReader();
+    reader.onerror=rej;
+    reader.onload=()=>{
+      img.onerror=rej;
+      img.onload=()=>{
+        let {width:w,height:h}=img;
+        if(w>h&&w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;}
+        else if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;}
+        const canvas=document.createElement("canvas");
+        canvas.width=w;canvas.height=h;
         canvas.getContext("2d").drawImage(img,0,0,w,h);
-        res(canvas.toDataURL("image/jpeg", quality));
+        res(canvas.toDataURL("image/jpeg",quality));
       };
-      img.src = reader.result;
+      img.src=reader.result;
     };
     reader.readAsDataURL(file);
   });
 }
 
-/* ── Step 4: Review ────────────────────────────────────────────────── */
+/* ── Step 5: Ringkasan Laporan Audit ──────────────────────────────── */
+function renderRingkasanStep(c) {
+  const r = STATE.ringkasan;
+  c.insertAdjacentHTML("beforeend", `
+    <div class="card">
+      <h2 style="margin-bottom:4px;">Ringkasan Laporan Audit</h2>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:18px;">
+        Sila isi rumusan dapatan audit sebelum menghantar laporan.
+      </p>
+
+      <div class="ringkasan-block">
+        <div class="ringkasan-block__label">
+          <span class="ringkasan-block__icon" style="background:#e4f4ec;color:#1e8e5a;">✓</span>
+          Kelebihan
+        </div>
+        <textarea id="r-kelebihan" class="ringkasan-ta" placeholder="Nyatakan kelebihan / perkara baik yang diperhatikan semasa audit...">${r.kelebihan}</textarea>
+      </div>
+
+      <div class="ringkasan-block">
+        <div class="ringkasan-block__label">
+          <span class="ringkasan-block__icon" style="background:#fbe8e5;color:#c0392b;">✗</span>
+          Kekurangan
+        </div>
+        <textarea id="r-kekurangan" class="ringkasan-ta" placeholder="Nyatakan kekurangan / isu yang dikesan semasa audit...">${r.kekurangan}</textarea>
+      </div>
+
+      <div class="ringkasan-block">
+        <div class="ringkasan-block__label">
+          <span class="ringkasan-block__icon" style="background:#e3eeec;color:#0b4f5c;">💡</span>
+          Cadangan
+        </div>
+        <textarea id="r-cadangan" class="ringkasan-ta" placeholder="Nyatakan cadangan untuk penambahbaikan...">${r.cadangan}</textarea>
+      </div>
+
+      <div class="ringkasan-block">
+        <div class="ringkasan-block__label">
+          <span class="ringkasan-block__icon" style="background:#fff3e0;color:#e8a23b;">🔧</span>
+          Penambahbaikan
+        </div>
+        <textarea id="r-penambahbaikan" class="ringkasan-ta" placeholder="Nyatakan tindakan penambahbaikan yang perlu dilaksanakan...">${r.penambahbaikan}</textarea>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" id="btn-back">← Kembali</button>
+      <button class="btn btn-primary" id="btn-next">Semak & Hantar →</button>
+    </div>
+  `);
+
+  ["kelebihan","kekurangan","cadangan","penambahbaikan"].forEach(key => {
+    document.getElementById("r-"+key).addEventListener("input", e => { STATE.ringkasan[key]=e.target.value; });
+  });
+  document.getElementById("btn-back").addEventListener("click", prevStep);
+  document.getElementById("btn-next").addEventListener("click", nextStep);
+}
+
+/* ── Step 6: Semak & Hantar ───────────────────────────────────────── */
 function renderReviewStep(c) {
   const marks = totalMarks();
-  const pct = Math.round(marks/TOTAL_QUESTIONS*100);
+  const nonTBTotal = Object.keys(STATE.answers).filter(no => !isTB(Number(no))).length;
+  const pct = Math.round(marks/nonTBTotal*100);
   const kat = getKategori(pct);
+  const tbCount = AUDIT_SECTIONS.reduce((s,sec)=>s+sec.questions.filter(q=>isTB(q.no)).length,0);
 
   c.insertAdjacentHTML("beforeend", `
     <div class="card">
       <h2 style="margin-bottom:10px;">Semak Sebelum Hantar</h2>
-      <p style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:10px;">
-        ${STATE.header.klinik} · ${STATE.header.daerah}<br>
-        PPP: ${STATE.header.namaPPP}<br>Auditor: ${STATE.header.auditorName}
-        ${STATE.auditType==="reaudit" ? '<span style="color:var(--color-accent);font-weight:700;"> · RE-AUDIT</span>' : ""}
-      </p>
-      ${AUDIT_SECTIONS.map(sec => {
-        const ya = sec.questions.filter(q=>STATE.answers[q.no].penilaian==="YA").length;
+      <div style="font-size:13.5px;color:var(--color-text-muted);margin-bottom:10px;line-height:1.7;">
+        <strong>${STATE.header.klinik}</strong> · ${STATE.header.daerah}<br>
+        PPP / Auditor: <strong>${STATE.header.namaPPP}</strong><br>
+        Tarikh: ${STATE.header.tarikhAudit}
+        ${STATE.auditType==="reaudit"?'<span class="re-audit-tag">RE-AUDIT</span>':""}
+      </div>
+
+      <div class="review-ambulans-status ${STATE.ambulansStatus==="tiada"?"is-tiada":""}">
+        ${STATE.ambulansStatus==="bersedia"
+          ? "🚑 Ambulans bersedia di lapangan"
+          : `🚫 Ambulans tiada di lapangan — ${STATE.ambulansSebab}`}
+      </div>
+
+      ${AUDIT_SECTIONS.map(sec=>{
+        const ya=sec.questions.filter(q=>!isTB(q.no)&&STATE.answers[q.no].penilaian==="YA").length;
+        const total=sec.questions.filter(q=>!isTB(q.no)).length;
         return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--color-border);">
-          <span>Bahagian ${sec.code} — ${sec.title}</span><strong>${ya}/${sec.questions.length}</strong></div>`;
+          <span>Bahagian ${sec.code} — ${sec.title}</span><strong>${ya}/${total}</strong></div>`;
       }).join("")}
+
+      ${tbCount ? `<div style="padding:8px 0;font-size:13px;color:var(--color-text-faint);">⊘ ${tbCount} soalan tidak berkenaan (diabaikan dalam pengiraan)</div>`:""}
+
       <div class="score-hero">
-        <div class="score-hero__value">${marks}/${TOTAL_QUESTIONS}</div>
+        <div class="score-hero__value">${marks}/${nonTBTotal}</div>
         <div class="score-hero__sub">${pct}% markah</div>
         <div class="kategori-chip" style="background:${kat.color}22;color:${kat.color};">${kat.label}</div>
       </div>
       <div class="spectrum" id="review-spectrum"></div>
+
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--color-border);">
+        <div style="font-size:11.5px;font-weight:700;text-transform:uppercase;color:var(--color-text-faint);letter-spacing:.04em;margin-bottom:8px;">Ringkasan Laporan</div>
+        ${["kelebihan","kekurangan","cadangan","penambahbaikan"].map(k=>`
+          <div style="margin-bottom:6px;font-size:13px;">
+            <span style="font-weight:600;text-transform:capitalize;">${k}:</span>
+            <span style="color:var(--color-text-muted)">${STATE.ringkasan[k]||"—"}</span>
+          </div>`).join("")}
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-ghost" id="btn-back">← Kembali</button>
-      <button class="btn btn-accent" id="btn-submit">Hantar Audit</button>
+      <button class="btn btn-accent" id="btn-submit">Hantar Audit ✓</button>
     </div>
   `);
 
@@ -316,9 +514,10 @@ function renderReviewStep(c) {
   document.getElementById("btn-submit").addEventListener("click", submitAudit);
 }
 
-/* ── Submit ────────────────────────────────────────────────────────── */
+/* ── Submit ───────────────────────────────────────────────────────── */
 async function submitAudit() {
   try {
+    const nonTBTotal = Object.keys(STATE.answers).filter(no => !isTB(Number(no))).length;
     const result = await Loading.withLoading("Menghantar audit & memuat naik foto...", async () => {
       const payload = {
         auditType: STATE.auditType,
@@ -326,25 +525,27 @@ async function submitAudit() {
         klinik: STATE.header.klinik,
         namaPPP: STATE.header.namaPPP,
         tarikhAudit: STATE.header.tarikhAudit,
-        auditorName: STATE.header.auditorName,
+        ambulansStatus: STATE.ambulansStatus,
+        ambulansSebab: STATE.ambulansSebab,
+        ringkasan: STATE.ringkasan,
         answers: Object.entries(STATE.answers).map(([qNo,a]) => ({
           qNo: Number(qNo),
-          penilaian: a.penilaian,
-          tindakSusul: a.tindakSusul,
+          penilaian: a.penilaian || "",
+          tindakSusul: a.tindakSusul || "",
           catatan: a.catatan,
-          photos: a.photos.map(p => ({ dataUrl: p.dataUrl, filename: p.filename }))
+          photos: (a.photos||[]).map(p=>({ dataUrl:p.dataUrl, filename:p.filename }))
         }))
       };
       const res = await Api.gasPost("submitAudit", payload);
       if (!res.success) throw new Error(res.error||"Gagal menghantar");
-      return res;
+      return { ...res, nonTBTotal };
     });
     STATE.result = result;
     renderResultStep();
   } catch(err) { toast("Gagal menghantar: "+err.message, "error"); }
 }
 
-/* ── Result + Star Rating ──────────────────────────────────────────── */
+/* ── Result + Star Rating ─────────────────────────────────────────── */
 function renderResultStep() {
   const c = document.getElementById("step-container");
   c.innerHTML = "";
@@ -353,28 +554,29 @@ function renderResultStep() {
 
   c.insertAdjacentHTML("beforeend", `
     <div class="card">
-      <h2 style="text-align:center;">Audit Berjaya Dihantar ✅</h2>
+      <h2 style="text-align:center;margin-bottom:14px;">Audit Berjaya Dihantar ✅</h2>
       <div class="score-hero">
-        <div class="score-hero__value">${r.totalMarks}/${TOTAL_QUESTIONS}</div>
+        <div class="score-hero__value">${r.totalMarks}/${r.nonTBTotal||TOTAL_QUESTIONS}</div>
         <div class="score-hero__sub">${r.percentage}% markah</div>
         <div class="kategori-chip" style="background:${kat.color}22;color:${kat.color};">${kat.label}</div>
       </div>
       <div class="spectrum" id="result-spectrum"></div>
     </div>
 
-    <div class="card" id="rating-card">
+    <div class="card">
       <h3 style="margin-bottom:4px;">Maklum Balas Penggunaan</h3>
-      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;">Bantu kami menambah baik sistem ini dengan penilaian anda.</p>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:14px;">Bantu kami menambah baik sistem ini.</p>
       <div class="toggle-group-label">Penilaian Sistem</div>
       <div class="star-row" id="star-row">
-        ${[1,2,3,4,5].map(n=>`<button type="button" class="star-btn" data-val="${n}" aria-label="${n} bintang">★</button>`).join("")}
+        ${[1,2,3,4,5].map(n=>`<button type="button" class="star-btn" data-val="${n}">★</button>`).join("")}
       </div>
       <div style="text-align:center;font-size:12px;color:var(--color-text-faint);margin:4px 0 12px;" id="star-label">Pilih bintang</div>
-      <div class="field"><label>Komen / Cadangan</label>
-        <textarea id="rating-comment" placeholder="Tuliskan pengalaman atau cadangan anda..." style="min-height:80px;width:100%;border-radius:8px;border:1.5px solid var(--color-border-strong);padding:10px 12px;font-family:inherit;font-size:14px;"></textarea>
+      <div class="field">
+        <label>Komen / Cadangan</label>
+        <textarea id="rating-comment" placeholder="Pengalaman atau cadangan anda..." style="min-height:72px;width:100%;border-radius:8px;border:1.5px solid var(--color-border-strong);padding:10px 12px;font-family:inherit;font-size:14px;"></textarea>
       </div>
-      <button class="btn btn-primary btn-block" id="btn-rate" style="margin-top:8px;">Hantar Maklum Balas</button>
-      <div id="rating-done" style="display:none;text-align:center;color:var(--color-success);font-weight:600;padding:12px 0;">Terima kasih atas maklum balas anda! 🙏</div>
+      <button class="btn btn-primary btn-block" id="btn-rate">Hantar Maklum Balas</button>
+      <div id="rating-done" style="display:none;text-align:center;color:var(--color-success);font-weight:600;padding:12px 0;">Terima kasih! 🙏</div>
     </div>
 
     <div class="btn-row">
@@ -387,58 +589,51 @@ function renderResultStep() {
 
   renderSpectrum(document.getElementById("result-spectrum"), r.percentage);
   document.querySelectorAll(".step-pill").forEach(el => el.classList.add("is-done"));
-  document.getElementById("progress-fill").style.width = "100%";
-  document.getElementById("progress-label").textContent = "Selesai";
+  document.getElementById("progress-fill").style.width="100%";
+  document.getElementById("progress-label").textContent="Selesai";
 
-  // Star rating interaction
-  const STAR_LABELS = ["","Sangat Lemah","Lemah","Memuaskan","Baik","Sangat Baik"];
-  let selectedStar = 0;
-  const stars = document.querySelectorAll(".star-btn");
-  const starLabel = document.getElementById("star-label");
-  stars.forEach(btn => {
-    btn.addEventListener("mouseenter", () => highlightStars(Number(btn.dataset.val)));
-    btn.addEventListener("mouseleave", () => highlightStars(selectedStar));
-    btn.addEventListener("click", () => {
-      selectedStar = Number(btn.dataset.val);
-      highlightStars(selectedStar);
-      starLabel.textContent = STAR_LABELS[selectedStar] + " — " + selectedStar + "/5";
-    });
+  const STAR_LABELS=["","Sangat Lemah","Lemah","Memuaskan","Baik","Sangat Baik"];
+  let selectedStar=0;
+  const stars=document.querySelectorAll(".star-btn");
+  const starLabel=document.getElementById("star-label");
+  function highlightStars(n){ stars.forEach(b=>b.classList.toggle("is-selected",Number(b.dataset.val)<=n)); }
+  stars.forEach(btn=>{
+    btn.addEventListener("mouseenter",()=>highlightStars(Number(btn.dataset.val)));
+    btn.addEventListener("mouseleave",()=>highlightStars(selectedStar));
+    btn.addEventListener("click",()=>{ selectedStar=Number(btn.dataset.val); highlightStars(selectedStar); starLabel.textContent=STAR_LABELS[selectedStar]+" — "+selectedStar+"/5"; });
   });
-  function highlightStars(n) {
-    stars.forEach(b => b.classList.toggle("is-selected", Number(b.dataset.val) <= n));
-  }
 
   document.getElementById("btn-rate").addEventListener("click", async () => {
-    if (!selectedStar) { toast("Sila pilih bintang dahulu.", "error"); return; }
-    const comment = document.getElementById("rating-comment").value.trim();
+    if (!selectedStar){ toast("Sila pilih bintang dahulu.","error"); return; }
     try {
-      await Loading.withLoading("Menghantar maklum balas...", async () => {
-        await Api.gasPost("submitRating", {
-          submissionId: r.submissionId,
-          rating: selectedStar,
-          comment
-        });
+      await Loading.withLoading("Menghantar maklum balas...", async()=>{
+        await Api.gasPost("submitRating",{ submissionId:r.submissionId, rating:selectedStar, comment:document.getElementById("rating-comment").value.trim() });
       });
-      document.getElementById("btn-rate").style.display = "none";
-      document.getElementById("rating-done").style.display = "block";
-    } catch(err) { toast("Gagal hantar: "+err.message, "error"); }
+      document.getElementById("btn-rate").style.display="none";
+      document.getElementById("rating-done").style.display="block";
+    } catch(err){ toast("Gagal hantar: "+err.message,"error"); }
   });
 
   document.getElementById("btn-pdf").addEventListener("click", async () => {
     try {
-      await Loading.withLoading("Menjana PDF...", async () => {
+      await Loading.withLoading("Menjana PDF...", async()=>{
         await generateAuditPdf({
           header: STATE.header,
           answers: STATE.answers,
+          ringkasan: STATE.ringkasan,
+          ambulansStatus: STATE.ambulansStatus,
+          ambulansSebab: STATE.ambulansSebab,
+          tbQuestions: TB_WHEN_TIADA,
           totalMarks: r.totalMarks,
+          nonTBTotal: r.nonTBTotal || TOTAL_QUESTIONS,
           percentage: r.percentage,
-          isReaudit: STATE.auditType === "reaudit"
+          isReaudit: STATE.auditType==="reaudit"
         });
       });
-    } catch(err) { toast("Gagal menjana PDF: "+err.message, "error"); }
+    } catch(err){ toast("Gagal menjana PDF: "+err.message,"error"); }
   });
 
-  document.getElementById("btn-new").addEventListener("click", () => location.href="index.html");
+  document.getElementById("btn-new").addEventListener("click", ()=>location.href="ambulans.html");
 }
 
 init();
