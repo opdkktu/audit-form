@@ -55,7 +55,6 @@
   }
 
   window.Api = { gasGet, gasPost };
-window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
   /* ---------------------------------------------------------------- */
   /* Loading overlay                                                  */
   /* ---------------------------------------------------------------- */
