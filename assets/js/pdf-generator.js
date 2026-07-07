@@ -44,8 +44,7 @@ async function generateAuditPdf({ header, answers, totalMarks, percentage, isRea
   let y = 88;
   const info = [
     ["Daerah", header.daerah], ["Klinik", header.klinik],
-    ["Nama PPP", header.namaPPP], ["Tarikh Audit", header.tarikhAudit],
-    ["Nama Auditor", header.auditorName]
+    ["Nama PPP", header.namaPPP], ["Tarikh Audit", header.tarikhAudit]
   ];
   doc.setFontSize(9.5);
   info.forEach(([label, val]) => {
