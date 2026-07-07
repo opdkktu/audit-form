@@ -1,3 +1,4 @@
+window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM2_GAS_URL;
 const STATE = {
   auditType: "kecemasan",
   masterData: { daerah: [], klinikByDaerah: {} },
