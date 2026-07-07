@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sistem Audit Digital — JKN Kedah</title>
+<meta name="description" content="Portal Sistem Audit Digital Jabatan Kesihatan Negeri Kedah">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --teal:#0bb88a;--teal-dim:#0e8c6b;
+  --amber:#f2a93b;
+  --glass-bg:rgba(255,255,255,.045);
+  --glass-border:rgba(255,255,255,.10);
+  --glass-hover:rgba(255,255,255,.075);
+  --text-hi:#ffffff;--text-mid:rgba(255,255,255,.70);--text-lo:rgba(255,255,255,.38);
+  --font-d:"Space Grotesk",system-ui,sans-serif;
+  --font-b:"Inter",system-ui,sans-serif;
+  --expo:cubic-bezier(.19,1,.22,1);
+}
+html,body{height:100%;background:#030d18;color:#fff;font-family:var(--font-b);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+
+#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;will-change:transform}
+.orb-1{width:600px;height:600px;background:radial-gradient(circle,rgba(11,184,138,.22) 0%,transparent 70%);top:-180px;left:-120px;animation:float1 18s ease-in-out infinite}
+.orb-2{width:500px;height:500px;background:radial-gradient(circle,rgba(242,169,59,.16) 0%,transparent 70%);bottom:-150px;right:-100px;animation:float2 22s ease-in-out infinite}
+.orb-3{width:350px;height:350px;background:radial-gradient(circle,rgba(11,79,200,.14) 0%,transparent 70%);top:40%;left:50%;transform:translate(-50%,-50%);animation:float3 26s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(60px,40px) scale(1.08)}66%{transform:translate(-30px,70px) scale(.95)}}
+@keyframes float2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,-60px) scale(1.1)}66%{transform:translate(40px,-20px) scale(.92)}}
+@keyframes float3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.25)}}
+.grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:60px 60px;mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 30%,transparent 100%)}
+
+.portal{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 20px 60px}
+
+.portal-header{display:flex;align-items:center;gap:14px;padding:36px 0 0;opacity:0;transform:translateY(-20px);animation:fadeUp .8s var(--expo) .1s forwards}
+.logo-wrap{width:52px;height:52px;border-radius:14px;overflow:hidden;border:1.5px solid var(--glass-border);background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;flex:none;box-shadow:0 0 24px rgba(11,184,138,.25)}
+.logo-wrap img{width:100%;height:100%;object-fit:contain}
+.logo-wrap .logo-fb{font-family:var(--font-d);font-weight:700;font-size:15px;color:var(--teal);display:none}
+.header-title{font-family:var(--font-d);font-size:16px;font-weight:600;color:#fff}
+.header-sub{font-size:12.5px;color:var(--text-lo);margin-top:2px}
+
+.hero{text-align:center;margin:56px 0 52px;opacity:0;transform:translateY(24px);animation:fadeUp .9s var(--expo) .25s forwards}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);background:rgba(11,184,138,.1);border:1px solid rgba(11,184,138,.25);border-radius:99px;padding:5px 14px;margin-bottom:22px}
+.hero-eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px var(--teal);animation:pulsedot 2s ease-in-out infinite}
+@keyframes pulsedot{0%,100%{opacity:1;box-shadow:0 0 6px var(--teal)}50%{opacity:.6;box-shadow:0 0 14px var(--teal)}}
+.hero h1{font-family:var(--font-d);font-size:clamp(28px,6vw,48px);font-weight:700;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(135deg,#fff 30%,rgba(11,184,138,.9) 70%,#f2a93b 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:14px}
+.hero p{font-size:16px;color:var(--text-mid);max-width:420px;margin:0 auto;line-height:1.6;font-weight:300}
+
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;width:100%;max-width:900px}
+
+.audit-card{position:relative;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:22px;padding:28px 24px 24px;cursor:pointer;text-decoration:none;color:#fff;overflow:hidden;transition:transform .3s var(--expo),box-shadow .3s ease,border-color .3s ease,background .3s ease;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;transform:translateY(32px)}
+.audit-card.is-active{animation:fadeUp .7s var(--expo) forwards}
+.audit-card.is-active:nth-child(1){animation-delay:.4s}
+.audit-card.is-active:nth-child(2){animation-delay:.52s}
+.audit-card.is-locked{animation:fadeUp .7s var(--expo) forwards;cursor:default;filter:saturate(.4)}
+.audit-card.is-locked:nth-child(3){animation-delay:.64s}
+.audit-card.is-locked:nth-child(4){animation-delay:.76s}
+.audit-card.is-active:hover{transform:translateY(-6px) scale(1.01);background:var(--glass-hover);border-color:rgba(11,184,138,.35);box-shadow:0 24px 48px rgba(0,0,0,.35),0 0 0 1px rgba(11,184,138,.15),0 0 60px rgba(11,184,138,.08)}
+.audit-card::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 60%);border-radius:inherit;opacity:0;transition:opacity .3s ease;pointer-events:none}
+.audit-card.is-active:hover::before{opacity:1}
+.card-glow{position:absolute;top:0;left:20%;right:20%;height:1px;border-radius:99px;background:linear-gradient(90deg,transparent,rgba(11,184,138,.6),transparent);opacity:0;transition:opacity .3s ease}
+.audit-card.is-active:hover .card-glow{opacity:1}
+.card-icon-wrap{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:18px;transition:box-shadow .3s ease,background .3s ease}
+.audit-card.is-active:hover .card-icon-wrap{background:rgba(11,184,138,.12);border-color:rgba(11,184,138,.25);box-shadow:0 0 20px rgba(11,184,138,.2)}
+.card-badge{position:absolute;top:18px;right:18px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 10px;border-radius:99px}
+.badge-active{background:rgba(11,184,138,.15);border:1px solid rgba(11,184,138,.3);color:var(--teal)}
+.badge-soon{background:rgba(242,169,59,.15);border:1px solid rgba(242,169,59,.3);color:#f2a93b}
+.badge-wip{background:rgba(100,130,255,.15);border:1px solid rgba(100,130,255,.3);color:#8fa8ff}
+.card-title{font-family:var(--font-d);font-size:17px;font-weight:700;color:#fff;margin-bottom:6px;line-height:1.25}
+.card-desc{font-size:13.5px;color:var(--text-mid);line-height:1.55;font-weight:300}
+.card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:22px;padding-top:16px;border-top:1px solid rgba(255,255,255,.06)}
+.card-tag{font-size:11px;font-weight:500;color:var(--text-lo);letter-spacing:.03em}
+.card-arrow{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-lo);transition:all .25s ease}
+.audit-card.is-active:hover .card-arrow{background:var(--teal);border-color:var(--teal);color:#fff;box-shadow:0 0 16px rgba(11,184,138,.4);transform:translateX(3px)}
+.card-lock-overlay{position:absolute;inset:0;border-radius:inherit;background:rgba(3,13,24,.35);display:flex;align-items:center;justify-content:center;font-size:28px;backdrop-filter:blur(1px)}
+
+.dash-link{display:inline-flex;align-items:center;gap:8px;margin-top:32px;font-size:13px;font-weight:500;color:var(--text-lo);text-decoration:none;border:1px solid rgba(255,255,255,.08);border-radius:99px;padding:9px 18px;backdrop-filter:blur(6px);transition:all .25s ease;opacity:0;animation:fadeUp .6s var(--expo) .9s forwards}
+.dash-link:hover{color:#fff;border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.05)}
+.portal-footer{margin-top:52px;text-align:center;font-size:12px;color:var(--text-lo);line-height:1.7;opacity:0;animation:fadeUp .6s var(--expo) 1s forwards}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:600px){.cards-grid{grid-template-columns:1fr;gap:14px}.hero{margin:40px 0 36px}.hero h1{font-size:28px}}
+
+/* Modal */
+.wip-modal{display:none;position:fixed;inset:0;z-index:100;background:rgba(3,13,24,.85);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px}
+.wip-modal-box{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:36px 28px;max-width:340px;width:100%;text-align:center;backdrop-filter:blur(16px)}
+.wip-modal-box h2{font-family:var(--font-d);font-size:20px;font-weight:700;margin:16px 0 8px}
+.wip-modal-box p{font-size:13.5px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:24px}
+.wip-close-btn{background:rgba(11,184,138,.15);border:1px solid rgba(11,184,138,.3);color:var(--teal);padding:11px 28px;border-radius:99px;font-size:14px;font-weight:600;cursor:pointer;width:100%;font-family:var(--font-b)}
+.wip-close-btn:hover{background:rgba(11,184,138,.25)}
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<div class="grid-overlay"></div>
+
+<div class="portal">
+
+  <header class="portal-header">
+    <div class="logo-wrap">
+      <img src="assets/img/logo.png" alt="Logo JKN Kedah" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <span class="logo-fb">JKN</span>
+    </div>
+    <div>
+      <div class="header-title">Jabatan Kesihatan Negeri Kedah</div>
+      <div class="header-sub">Sistem Audit Digital</div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="hero-eyebrow">Portal Audit Digital</div>
+    <h1>Satu Platform,<br>Semua Audit</h1>
+    <p>Pilih jenis audit untuk memulakan senarai semak digital JKN Kedah.</p>
+  </div>
+
+  <div class="cards-grid">
+
+    <a class="audit-card is-active" href="ambulans.html">
+      <div class="card-glow"></div>
+      <div class="card-badge badge-active">Aktif</div>
+      <div class="card-icon-wrap">🚑</div>
+      <div class="card-title">Audit Teknikal Ambulans</div>
+      <div class="card-desc">Senarai semak pematuhan operasi, peralatan &amp; dokumentasi ambulans Klinik Kesihatan.</div>
+      <div class="card-footer">
+        <span class="card-tag">30 Soalan · 3 Bahagian</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </a>
+
+    <a class="audit-card is-active" href="#" data-wip="Audit Kecemasan" data-wip-icon="🏥">
+      <div class="card-glow"></div>
+      <div class="card-badge badge-wip">Dalam Pembangunan</div>
+      <div class="card-icon-wrap">🏥</div>
+      <div class="card-title">Audit Kecemasan</div>
+      <div class="card-desc">Penilaian standard pengurusan kes kecemasan dan kesediaan unit perkhidmatan.</div>
+      <div class="card-footer">
+        <span class="card-tag">Unit Kecemasan</span>
+        <div class="card-arrow">→</div>
+      </div>
+    </a>
+
+    <div class="audit-card is-locked">
+      <div class="card-badge badge-soon">Akan Datang</div>
+      <div class="card-icon-wrap">💊</div>
+      <div class="card-title">Audit Pain Score</div>
+      <div class="card-desc">Pemantauan dan penilaian pengurusan sakit pesakit mengikut protokol semasa.</div>
+      <div class="card-footer">
+        <span class="card-tag">Pengurusan Sakit</span>
+        <div class="card-arrow">🔒</div>
+      </div>
+      <div class="card-lock-overlay">🔒</div>
+    </div>
+
+    <div class="audit-card is-locked">
+      <div class="card-badge badge-soon">Akan Datang</div>
+      <div class="card-icon-wrap">🦠</div>
+      <div class="card-title">Audit Infection Control</div>
+      <div class="card-desc">Audit pematuhan kawalan jangkitan dan kebersihan persekitaran klinik kesihatan.</div>
+      <div class="card-footer">
+        <span class="card-tag">Kawalan Jangkitan</span>
+        <div class="card-arrow">🔒</div>
+      </div>
+      <div class="card-lock-overlay">🔒</div>
+    </div>
+
+  </div>
+
+  <a class="dash-link" href="dashboard.html">📊 Dashboard Analisis Negeri</a>
+
+  <div class="portal-footer">
+    Jabatan Kesihatan Negeri Kedah &nbsp;·&nbsp; Sistem Audit Digital v1.0<br>
+    <span style="opacity:.5">Dibangunkan untuk kegunaan dalaman JKN Kedah</span>
+  </div>
+
+</div>
+
+<!-- WIP Modal -->
+<div class="wip-modal" id="wip-modal">
+  <div class="wip-modal-box">
+    <div id="wip-icon" style="font-size:44px">🏥</div>
+    <h2 id="wip-title">Dalam Pembangunan</h2>
+    <p>Modul ini sedang dalam pembangunan dan akan dilancarkan tidak lama lagi. Nantikan kemaskini terbaru.</p>
+    <button class="wip-close-btn" id="wip-close">Tutup</button>
+  </div>
+</div>
+
+<script>
+/* ── Particle canvas ─────────────────────────────────────────────── */
+(function(){
+  const canvas=document.getElementById("bg-canvas");
+  const ctx=canvas.getContext("2d");
+  const N=55;
+  let W,H,pts=[];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+  function r(a,b){return Math.random()*(b-a)+a;}
+  function mkPt(){return{x:r(0,W),y:r(0,H),rx:r(1,2.2),vx:r(-.12,.12),vy:r(-.18,-.04),a:r(.15,.55),ad:Math.random()>.5?1:-1,as:r(.002,.006)};}
+  function init(){resize();pts=Array.from({length:N},mkPt);}
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    for(let i=0;i<pts.length;i++){
+      for(let j=i+1;j<pts.length;j++){
+        const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<100){ctx.beginPath();ctx.strokeStyle=`rgba(11,184,138,${.06*(1-d/100)})`;ctx.lineWidth=.5;ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.stroke();}
+      }
+    }
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;p.a+=p.ad*p.as;
+      if(p.a>.55||p.a<.08)p.ad*=-1;
+      if(p.y<-10){p.y=H+5;p.x=r(0,W);}
+      if(p.x<-10)p.x=W+5;
+      if(p.x>W+10)p.x=-5;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.rx,0,Math.PI*2);
+      ctx.fillStyle=`rgba(11,184,138,${p.a})`;ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener("resize",resize);
+  init();
+  if(!window.matchMedia("(prefers-reduced-motion:reduce)").matches) draw();
+})();
+
+/* ── WIP modal ───────────────────────────────────────────────────── */
+const modal=document.getElementById("wip-modal");
+const wipIcon=document.getElementById("wip-icon");
+const wipTitle=document.getElementById("wip-title");
+document.querySelectorAll("[data-wip]").forEach(el=>{
+  el.addEventListener("click",e=>{
+    e.preventDefault();
+    wipTitle.textContent=el.dataset.wip;
+    wipIcon.textContent=el.dataset.wipIcon||"🏗️";
+    modal.style.display="flex";
+  });
+});
+document.getElementById("wip-close").addEventListener("click",()=>modal.style.display="none");
+modal.addEventListener("click",e=>{if(e.target===modal)modal.style.display="none";});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")modal.style.display="none";});
+</script>
+</body>
+</html>
