@@ -693,5 +693,5 @@ launchFireworks();
 
   document.getElementById("btn-new").addEventListener("click", ()=>location.href="ambulans.html");
 }
-
+window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
 init();
