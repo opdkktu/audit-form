@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Borang Audit — JKN Kedah</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <header class="app-header">
+    <div class="app-header__logo">
+      <img src="assets/img/logo.png" alt="" onerror="this.parentElement.textContent='JKN'">
+    </div>
+    <div>
+      <div class="app-header__title">Audit Kecemasan</div>
+      <div class="app-header__subtitle" id="auditor-badge">Audit</div>
+    </div>
+  </header>
+
+  <div class="progress-track">
+    <div class="progress-bar"><div class="progress-bar__fill" id="progress-fill" style="width:0%"></div></div>
+    <div class="progress-meta">
+      <span id="progress-label">Langkah 1 / 5</span>
+      <span><strong id="progress-score">0/30</strong> markah</span>
+    </div>
+    <div class="step-pills" id="step-pills"></div>
+  </div>
+
+  <main id="step-container" aria-live="polite"></main>
+</div>
+
+<script src="assets/js/config.js" onerror="console.error('config.js tidak dijumpai — lihat README.md')"></script>
+<script src="assets/js/questions-data.js"></script>
+<script src="assets/js/spectrum.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/pdf-generator.js"></script>
+<script src="assets/js/form.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+</body>
+</html>
