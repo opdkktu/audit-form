@@ -8,7 +8,7 @@
 //     "Ambulans tiada di lapangan" is selected.
 //     Example: const TB_WHEN_TIADA = [1, 4, 5, 7, 8, 11, 12];
 // ─────────────────────────────────────────────────────────────────────────
-const TB_WHEN_TIADA = [];
+const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 
 const TB_VAL = "TIDAK_BERKENAAN";
 
