@@ -41,9 +41,14 @@ let CHARTS = {};
       });
       document.getElementById("pin-gate").remove();
       document.getElementById("dashboard-content").style.display = "block";
+
+      // Populate dropdowns + table immediately — no Chart.js needed
+      setupFilters();
+      renderTable(RAW.submissions);
+
+      // Load Chart.js then render charts
       await Loading.withLoading("Menjana graf...", async () => {
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js");
-        setupFilters();
+        await loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js");
         renderAll();
       });
     } catch (err) {
@@ -191,10 +196,9 @@ function renderTable(subs) {
       <td>${s.tarikhAudit}</td>
       <td>${s.daerah}</td>
       <td>${s.klinik}</td>
-      <td>Auditor ${s.auditorRole} — ${s.auditorName}</td>
+      <td>${s.namaPPP || "-"}</td>
       <td>${s.totalMarks}/30 (${s.percentage}%)</td>
       <td>${s.kategori}</td>
-      <td></td>
     </tr>
-  `).join("") || `<tr><td colspan="7" class="empty-state">Tiada audit dijumpai.</td></tr>`;
+  `).join("") || `<tr><td colspan="6" class="empty-state">Tiada audit dijumpai.</td></tr>`;
 }
