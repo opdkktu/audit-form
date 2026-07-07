@@ -20,9 +20,7 @@
  */
 
 (function () {
-  const CFG = window.APP_CONFIG || {};
-
-  if (!CFG.GAS_URL || CFG.GAS_URL.indexOf("PASTE_") === 0) {
+  if (!window.APP_CONFIG || !window.APP_CONFIG.FORM1_GAS_URL) {
     console.warn(
       "[config] GAS_URL is not set. Copy assets/js/config.sample.js to " +
       "assets/js/config.js for local testing, or check the deploy workflow."
@@ -31,6 +29,7 @@
 
   /** GET request — used for public reads only (no secrets in the URL). */
   async function gasGet(action, params) {
+    const CFG = window.APP_CONFIG || {};
     const url = new URL(CFG.GAS_URL);
     url.searchParams.set("action", action);
     url.searchParams.set("token", CFG.SHARED_TOKEN || "");
@@ -44,6 +43,7 @@
 
   /** POST request (text/plain trick) — used for writes and PIN-gated reads. */
   async function gasPost(action, payload) {
+    const CFG = window.APP_CONFIG || {};
     const body = JSON.stringify(Object.assign({ action, token: CFG.SHARED_TOKEN || "" }, payload || {}));
     const res = await fetch(CFG.GAS_URL, {
       method: "POST",
@@ -55,6 +55,7 @@
   }
 
   window.Api = { gasGet, gasPost };
+
   /* ---------------------------------------------------------------- */
   /* Loading overlay                                                  */
   /* ---------------------------------------------------------------- */
