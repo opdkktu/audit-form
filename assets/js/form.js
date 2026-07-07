@@ -30,7 +30,7 @@
 //     CARA EDIT: Salin nombor soalan yang bersesuaian ke dalam array bawah.
 //     Contoh siap guna: const TB_WHEN_TIADA = [1,3,4,5,6,8,9,11,13,15,16,17];
 // ─────────────────────────────────────────────────────────────────────────
-
+window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
 const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 const TB_VAL = "TIDAK_BERKENAAN";
 
@@ -693,5 +693,4 @@ launchFireworks();
 
   document.getElementById("btn-new").addEventListener("click", ()=>location.href="ambulans.html");
 }
-window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
 init();
