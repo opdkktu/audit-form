@@ -1,0 +1,52 @@
+name: Deploy to GitHub Pages
+
+# This workflow is the reason the Apps Script URL never has to live in
+# your repository source code. It reads two GitHub repository Secrets
+# (Settings ▸ Secrets and variables ▸ Actions) and writes them into
+# assets/js/config.js ONLY inside this temporary build, right before
+# publishing — config.js itself is never committed to the repo.
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate config.js from repository secrets
+        run: |
+          cat > assets/js/config.js <<EOF
+          window.APP_CONFIG = {
+            GAS_URL: "${{ secrets.GAS_URL }}",
+            SHARED_TOKEN: "${{ secrets.SHARED_TOKEN }}"
+          };
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
