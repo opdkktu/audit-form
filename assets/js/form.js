@@ -4,12 +4,34 @@
  */
 
 // ─────────────────────────────────────────────────────────────────────────
-// ⚠️  EDIT THIS: question numbers that become "Tidak Berkenaan" when
-//     "Ambulans tiada di lapangan" is selected.
-//     Example: const TB_WHEN_TIADA = [1, 4, 5, 7, 8, 11, 12];
+// ⚠️  EDIT THIS: question numbers marked "Tidak Berkenaan" when ambulans
+//     tiada di lapangan. Soalan berkaitan rekod/dokumen biasanya TIDAK
+//     perlu dimasukkan di sini (boleh semak walaupun ambulans tiada).
+//
+//     CONTOH soalan yang LAZIMNYA tidak berkenaan jika ambulans tiada:
+//       Bahagian A — fizikal kenderaan:
+//         1  Kebersihan luaran & dalaman ambulans
+//         3  Cukai jalan (tidak dapat semak)
+//         4  Senarai semak harian (tiada ambulans utk dirujuk)
+//         5  Pemeriksaan lampu, tayar, brek
+//         6  Peralatan kecemasan kenderaan (kon, pemadam api)
+//         8  Set komunikasi GIRN dalam ambulans
+//         9  Bahan pembersihan & pembasmian dalam ambulans
+//       Bahagian B — peralatan fizikal dalam ambulans:
+//         11 EMTS beg & alatan
+//         13 Peralatan perubatan berfungsi & dalam keadaan baik
+//         15 Item consumables dalam ambulans
+//         16 Label peralatan/ubat di bahagian betul
+//         17 Stretcher & safety strapping
+//
+//     Soalan ini TIDAK perlu dimasukkan (rekod boleh disemak tanpa ambulans):
+//         2, 7, 10, 12, 14, 18–30 (semua Bahagian C — Dokumentasi)
+//
+//     CARA EDIT: Salin nombor soalan yang bersesuaian ke dalam array bawah.
+//     Contoh siap guna: const TB_WHEN_TIADA = [1,3,4,5,6,8,9,11,13,15,16,17];
 // ─────────────────────────────────────────────────────────────────────────
-const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 
+const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 const TB_VAL = "TIDAK_BERKENAAN";
 
 const STATE = {
@@ -25,8 +47,8 @@ const STATE = {
 };
 
 const STEPS = [
-  { key:"info",      label:"Maklumat" },
   { key:"ambulans",  label:"Status"   },
+  { key:"info",      label:"Maklumat" },
   { key:"section",   sectionIndex:0, label:"A" },
   { key:"section",   sectionIndex:1, label:"B" },
   { key:"section",   sectionIndex:2, label:"C" },
@@ -120,7 +142,7 @@ function goToStep(n) {
   window.scrollTo({ top:0, behavior:"smooth" });
 }
 function nextStep() {
-  if (STATE.currentStep===0 && !validateInfo()) return;
+  if (STEPS[STATE.currentStep].key==="info" && !validateInfo()) return;
   if (STEPS[STATE.currentStep].key==="ambulans" && !validateAmbulan()) return;
   if (STEPS[STATE.currentStep].key==="section") {
     const si = STEPS[STATE.currentStep].sectionIndex;
