@@ -106,9 +106,8 @@ function renderInfoStep(c) {
       <div class="field"><label for="f-klinik">Klinik Dilawati</label>
         <select id="f-klinik"><option value="">— Pilih Daerah dahulu —</option></select>
       </div>
-      <div class="field"><label for="f-nama-ppp">Nama PPP / Auditor</label>
+      <div class="field"><label for="f-nama-ppp">Nama Auditor PPP</label>
         <input type="text" id="f-nama-ppp" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.namaPPP}">
-        <div class="field-hint">Akan ditukar huruf besar secara automatik.</div>
       </div>
       <div class="field"><label>Tarikh Audit</label>
         <input type="text" class="input-readonly" value="${todayDisplay()}" readonly>
