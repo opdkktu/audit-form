@@ -48,7 +48,7 @@ const AUDIT_SECTIONS = [
       { no: 21, text: "PPE mencukupi" },
       { no: 22, text: "Tong sisa klinikal  / Sharp bin tersedia" },
       { no: 23, text: "Hand sanitizer, tisu dan sabun basuh tangan tersedia dan mencukupi" },
-      { no: 24, text: "Bilik isolasi ( jika ada ) berfungsi" }
+      { no: 24, text: "Ruang /Bilik isolasi berfungsi" }
 ]
   },
   {
@@ -63,7 +63,7 @@ const AUDIT_SECTIONS = [
       { no: 29, text: "Checklist harian peralatan disimpan" },
       { no: 30, text: "Rekod Latihan dalam perkhidmatan untuk meningkatkan kemahiran dan pengetahuan mengenai perkhidmatan kecemasan" },
       { no: 31, text: "Mempunyai sumber rujukan ( buku GP ), dan borang - borang yang berkaitan" },
-      { no: 32, text: "Latihan simulasi kecemasan ( jika ada )" }
+      { no: 32, text: "Latihan simulasi kecemasan" }
     ]
   }
 ];
