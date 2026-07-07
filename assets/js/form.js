@@ -178,6 +178,7 @@ function renderInfoStep(c) {
     <div class="btn-row"><button class="btn btn-primary btn-block" id="btn-next">Seterusnya →</button></div>
   `);
 
+
   const daerahSel = document.getElementById("f-daerah");
   const klinikSel = document.getElementById("f-klinik");
   function refreshKlinik(keep) {
@@ -475,7 +476,42 @@ function renderRingkasanStep(c) {
   document.getElementById("btn-back").addEventListener("click", prevStep);
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
+function launchFireworks() {
+          const duration = 5 * 1000; // The fireworks show will last for 5 seconds
+          const animationEnd = Date.now() + duration;
+          const defaults = { 
+            startVelocity: 30, 
+            spread: 360, 
+            ticks: 60, 
+            zIndex: 1001 
+          };
 
+          function randomInRange(min, max) {
+            return Math.random() * (max - min) + min;
+          }
+
+          const interval = setInterval(function() {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+              return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+    
+            // Launch a firework from the left side
+            confetti(Object.assign({}, defaults, { 
+              particleCount, 
+              origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } 
+            }));
+    
+            // Launch a firework from the right side
+            confetti(Object.assign({}, defaults, { 
+              particleCount, 
+              origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } 
+            }));
+          }, 250); // Launch new fireworks every 250ms
+        }
 /* ── Step 6: Semak & Hantar ───────────────────────────────────────── */
 function renderReviewStep(c) {
   const marks = totalMarks();
@@ -608,7 +644,7 @@ function renderResultStep() {
       <button class="btn btn-ghost btn-block" id="btn-new">← Borang Baru</button>
     </div>
   `);
-
+launchFireworks();
   renderSpectrum(document.getElementById("result-spectrum"), r.percentage);
   document.querySelectorAll(".step-pill").forEach(el => el.classList.add("is-done"));
   document.getElementById("progress-fill").style.width="100%";
