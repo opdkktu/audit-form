@@ -99,6 +99,7 @@ function filteredSubmissions() {
 function renderAll() {
   const subs = filteredSubmissions();
   renderKpis(subs);
+  renderProgress(subs); 
   renderDaerahChart(subs);
   renderKategoriChart(subs);
   renderTrendChart(subs);
