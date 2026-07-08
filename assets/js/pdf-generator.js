@@ -96,7 +96,7 @@ async function generateAuditPdf({ header, answers, totalMarks, percentage, isRea
   // ── Score summary ────────────────────────────────────────────────────
   if (y > 680) { doc.addPage(); y = 60; }
   doc.setFont("helvetica","bold"); doc.setFontSize(12);
-  doc.text(`Markah: ${totalMarks} / 30  (${percentage}%)`, M, y); y += 16;
+  doc.text(`Markah: ${totalMarks} / ${nonTBTotal}  (${percentage}%)`, M, y); y += 16;
   doc.setFillColor(...hexToRgb(kategori.color));
   doc.roundedRect(M, y-11, 290, 20, 4, 4, "F");
   doc.setTextColor(255,255,255); doc.setFontSize(10);
