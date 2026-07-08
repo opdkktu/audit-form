@@ -6,7 +6,7 @@
  * cost of the charting library just to see the PIN screen.
  */
 
-let RAW = { submissions: [], details: [] };
+let RAW = { submissions: [], details: [], totalKK: 0, totalKKByDaerah: {} };
 let CHARTS = {};
 
 /* ---------------------------------------------------------------------- */
