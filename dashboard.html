@@ -7,10 +7,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
+<style>
+@keyframes progshimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
+</style>
 </head>
 <body>
 
-<!-- PIN gate (shown first, removed once PIN is verified) -->
 <div class="pin-gate" id="pin-gate">
   <div class="card">
     <h2 style="text-align:center;margin-bottom:6px;">Dashboard Negeri</h2>
@@ -28,28 +30,28 @@
   </div>
 </div>
 
-<!-- Dashboard content (hidden until PIN verified) -->
 <div class="app-shell" id="dashboard-content" style="display:none;">
   <header class="app-header">
     <div class="app-header__logo">
-      <img src="https://raw.githubusercontent.com/opdkktu/audit-form/main/assets/img/ppp.jpeg" alt="" onerror="this.parentElement.textContent='JKN'">
+      <img src="assets/img/logo.png" alt="" onerror="this.parentElement.textContent='JKN'">
     </div>
     <div>
       <div class="app-header__title">Dashboard Analisis Negeri</div>
-      <div class="app-header__subtitle">Audit Teknikal Ambulans — JKN Kedah</div>
+      <div class="app-header__subtitle">Sistem Audit Digital — JKN Kedah</div>
     </div>
   </header>
-<div class="card" style="margin-bottom:14px;" id="progress-section">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
-    <div>
-      <h3 style="margin-bottom:2px;">Kemajuan Audit Tahunan</h3>
-      <div style="font-size:12px;color:var(--color-text-faint);" id="progress-year">Tahun <span id="prog-year-label"></span></div>
+
+  <!-- Progress bar -->
+  <div class="card" style="margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin-bottom:2px;">Kemajuan Audit Tahunan</h3>
+        <div style="font-size:12px;color:var(--color-text-faint);">Tahun <span id="prog-year-label"></span></div>
+      </div>
+      <select id="filter-progress-daerah" style="padding:8px 12px;border-radius:8px;border:1.5px solid var(--color-border-strong);font-size:13px;background:var(--color-surface);">
+        <option value="">Seluruh Negeri</option>
+      </select>
     </div>
-    <select id="filter-progress-daerah" style="padding:8px 12px;border-radius:8px;border:1.5px solid var(--color-border-strong);font-size:13px;background:var(--color-surface);">
-      <option value="">Seluruh Negeri</option>
-    </select>
-  </div>
-  <div id="prog-bar-wrap">
     <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-text-muted);margin-bottom:6px;">
       <span id="prog-label">0 / 0 Klinik Kesihatan</span>
       <span id="prog-pct">0%</span>
@@ -58,23 +60,29 @@
       <div id="prog-fill" style="height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,#0bb88a,#4fa37c,#f2a93b,#0bb88a);background-size:300% 100%;transition:width 1.2s cubic-bezier(.22,1,.36,1);animation:progshimmer 2.5s linear infinite;"></div>
     </div>
   </div>
-</div>
-<style>
-@keyframes progshimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
-</style>
+
+  <!-- KPIs -->
   <div class="kpi-grid" id="kpi-grid"></div>
 
+  <!-- Spectrum -->
   <div class="card" style="margin-bottom:14px;">
     <h3 style="margin-bottom:2px;">Purata Markah Negeri</h3>
-    <div class="chart-card__sub">Kedudukan purata semua audit (tertapis) pada skala pematuhan rasmi</div>
+    <div class="chart-card__sub">Kedudukan purata semua audit pada skala pematuhan rasmi</div>
     <div class="spectrum" id="dashboard-spectrum"></div>
   </div>
 
+  <!-- Filters -->
   <div class="filter-row">
+    <select id="filter-audit-type">
+      <option value="">Semua Jenis Audit</option>
+      <option value="ambulans">Audit Ambulans</option>
+      <option value="kecemasan">Audit Kecemasan</option>
+    </select>
     <select id="filter-daerah"><option value="">Semua Daerah</option></select>
     <select id="filter-klinik"><option value="">Semua Klinik</option></select>
   </div>
 
+  <!-- Charts -->
   <div class="card chart-card">
     <h3>Purata Markah Mengikut Daerah</h3>
     <div class="chart-card__sub">Peratus purata semua audit, dikumpul mengikut daerah</div>
@@ -95,17 +103,18 @@
 
   <div class="card chart-card">
     <h3>Soalan Paling Kerap Gagal</h3>
-    <div class="chart-card__sub">Bilangan tanda "Tidak" bagi setiap soalan, merentas semua audit</div>
+    <div class="chart-card__sub">Bilangan tanda "Tidak" merentas semua audit</div>
     <canvas id="chart-failpoints" height="280"></canvas>
   </div>
 
+  <!-- Table -->
   <div class="card">
     <h3 style="margin-bottom:10px;">Senarai Audit</h3>
     <div class="table-wrap">
       <table class="data-table" id="audit-table">
         <thead>
           <tr>
-            <th>Tarikh</th><th>Daerah</th><th>Klinik</th><th>Nama PPP</th><th>Markah</th><th>Kategori</th>
+            <th>Tarikh</th><th>Daerah</th><th>Klinik</th><th>Nama PPP</th><th>Jenis Audit</th><th>Markah</th><th>Kategori</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -114,10 +123,15 @@
   </div>
 </div>
 
-<script src="assets/js/config.js" onerror="console.error('config.js tidak dijumpai — lihat README.md')"></script>
+<script src="assets/js/config.js" onerror="console.error('config.js tidak dijumpai')"></script>
 <script src="assets/js/questions-data.js"></script>
 <script src="assets/js/spectrum.js"></script>
 <script src="assets/js/api.js"></script>
+<script>
+  // Point API to dedicated Dashboard GAS
+  window.APP_CONFIG.GAS_URL = window.APP_CONFIG.DASHBOARD_GAS_URL;
+  window.APP_CONFIG.SHARED_TOKEN = window.APP_CONFIG.DASHBOARD_TOKEN;
+</script>
 <script src="assets/js/dashboard.js"></script>
 </body>
 </html>
