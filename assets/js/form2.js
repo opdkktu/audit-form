@@ -204,7 +204,7 @@ function buildQuestionCard(q) {
     <div class="photo-zone">
       <div class="photo-thumbs"></div>
       <label class="photo-add-btn">📷 Tambah Foto
-        <input type="file" accept="image/*" capture="environment" multiple style="display:none;">
+        <input type="file" accept="image/*" multiple style="display:none;">
       </label>
     </div>
   `;
