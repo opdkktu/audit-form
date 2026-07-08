@@ -28,9 +28,11 @@ jobs:
         run: |
           cat > assets/js/config.js <<EOF
           window.APP_CONFIG = {
-            FORM1_GAS_URL: "${{ secrets.FORM1_GAS_URL }}",
-            FORM2_GAS_URL: "${{ secrets.FORM2_GAS_URL }}",
-            SHARED_TOKEN: "${{ secrets.SHARED_TOKEN }}"
+            FORM1_GAS_URL:     "${{ secrets.FORM1_GAS_URL }}",
+            FORM2_GAS_URL:     "${{ secrets.FORM2_GAS_URL }}",
+            DASHBOARD_GAS_URL: "${{ secrets.DASHBOARD_GAS_URL }}",
+            SHARED_TOKEN:      "${{ secrets.SHARED_TOKEN }}",
+            DASHBOARD_TOKEN:   "${{ secrets.DASHBOARD_TOKEN }}"
           };
           EOF
 
