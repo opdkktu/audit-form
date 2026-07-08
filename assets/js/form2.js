@@ -2,7 +2,7 @@ window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM2_GAS_URL;
 const STATE = {
   auditType: "kecemasan",
   masterData: { daerah: [], klinikByDaerah: {} },
-  header: { daerah:"", klinik:"", namaPPP:"", tarikhAudit:"" },
+  header: { daerah:"", klinik:"", namaPPP:"", tempatBertugas:"", emelAuditor:"",tarikhAudit:"" },
   answers: {},
   ringkasan: { kelebihan:"", kekurangan:"", cadangan:"", penambahbaikan:"" },
   currentStep: 0,
@@ -109,6 +109,13 @@ function renderInfoStep(c) {
       <div class="field"><label for="f-nama-ppp">Nama Auditor PPP</label>
         <input type="text" id="f-nama-ppp" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.namaPPP}">
       </div>
+       <div class="field"><label for="f-tempat">Tempat Bertugas Auditor</label>
+        <input type="text" id="f-tempat" class="input-uppercase" placeholder="CONTOH: KK BANDAR BAHARU" value="${STATE.header.tempatBertugas}">
+      </div>
+      <div class="field"><label for="f-emel">Emel Auditor</label>
+        <input type="email" id="f-emel" placeholder="contoh@moh.gov.my" value="${STATE.header.emelAuditor}">
+        <div class="field-hint">Ringkasan audit akan dihantar ke emel ini selepas submit.</div>
+      </div>
       <div class="field"><label>Tarikh Audit</label>
         <input type="text" class="input-readonly" value="${todayDisplay()}" readonly>
       </div>
@@ -133,12 +140,19 @@ function renderInfoStep(c) {
     const p = namaPPP.selectionStart; namaPPP.value = namaPPP.value.toUpperCase(); namaPPP.setSelectionRange(p,p);
     STATE.header.namaPPP = namaPPP.value;
   });
+   const tempatEl = document.getElementById("f-tempat");
+  tempatEl.addEventListener("input", () => {
+    const p = tempatEl.selectionStart; tempatEl.value = tempatEl.value.toUpperCase(); tempatEl.setSelectionRange(p,p);
+    STATE.header.tempatBertugas = tempatEl.value;
+  });
+  document.getElementById("f-emel").addEventListener("input", e => { STATE.header.emelAuditor = e.target.value; });
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
 function validateInfo() {
   if (!STATE.header.daerah)        { toast("Sila pilih Daerah.","error"); return false; }
   if (!STATE.header.klinik)        { toast("Sila pilih Klinik.","error"); return false; }
   if (!STATE.header.namaPPP.trim()){ toast("Sila isi Nama PPP / Auditor.","error"); return false; }
+  if (!STATE.header.tempatBertugas.trim()){ toast("Sila isi Tempat Bertugas.","error"); return false; }
   return true;
 }
 
