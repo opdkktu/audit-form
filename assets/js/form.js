@@ -681,6 +681,7 @@ launchFireworks();
           ambulansStatus: STATE.ambulansStatus,
           ambulansSebab: STATE.ambulansSebab,
           tbQuestions: TB_WHEN_TIADA,
+          auditLabel: "Audit Ambulans",
           totalMarks: r.totalMarks,
           nonTBTotal: r.nonTBTotal || TOTAL_QUESTIONS,
           percentage: r.percentage,
