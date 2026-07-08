@@ -188,7 +188,41 @@ function renderFailpointsChart(subs) {
     options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
   });
 }
+function renderProgress(subs) {
+  const year = new Date().getFullYear();
+  document.getElementById("prog-year-label").textContent = year;
 
+  const daerah = document.getElementById("filter-progress-daerah").value;
+  const yearSubs = subs.filter(s => String(s.tarikhAudit).startsWith(String(year)));
+  const filtered = daerah ? yearSubs.filter(s => s.daerah === daerah) : yearSubs;
+
+  const auditedKK = new Set(filtered.map(s => s.klinik)).size;
+  const totalKK = daerah
+    ? (RAW.totalKKByDaerah[daerah] || 0)
+    : (RAW.totalKK || 0);
+
+  const pct = totalKK ? Math.min(100, Math.round(auditedKK / totalKK * 100)) : 0;
+
+  document.getElementById("prog-label").textContent = `${auditedKK} / ${totalKK} Klinik Kesihatan`;
+  document.getElementById("prog-pct").textContent = pct + "%";
+
+  // Animate after short delay so CSS transition fires
+  setTimeout(() => {
+    document.getElementById("prog-fill").style.width = pct + "%";
+  }, 100);
+
+  // Populate daerah filter
+  const sel = document.getElementById("filter-progress-daerah");
+  const daerahList = Object.keys(RAW.totalKKByDaerah || {}).sort();
+  if (sel.options.length === 1) { // only "Seluruh Negeri"
+    daerahList.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d; opt.textContent = d;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", () => renderProgress(filteredSubmissions()));
+  }
+}
 function renderTable(subs) {
   const sorted = [...subs].sort((a, b) => new Date(b.tarikhAudit) - new Date(a.tarikhAudit));
   document.querySelector("#audit-table tbody").innerHTML = sorted.map(s => `
