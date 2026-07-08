@@ -14,7 +14,7 @@ const STEPS = [
   { key:"section",   sectionIndex:0, label:"A" },
   { key:"section",   sectionIndex:1, label:"B" },
   { key:"section",   sectionIndex:2, label:"C" },
-  { key:"section",   sectionIndex:2, label:"D" },
+  { key:"section",   sectionIndex:3, label:"D" },
   { key:"ringkasan", label:"Ringkasan" },
   { key:"review",    label:"Semak"     }
 ];
