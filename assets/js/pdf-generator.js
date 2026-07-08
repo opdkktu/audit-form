@@ -22,7 +22,8 @@ function hexToRgb(hex) {
   return [parseInt(m.slice(0,2),16), parseInt(m.slice(2,4),16), parseInt(m.slice(4,6),16)];
 }
 
-async function generateAuditPdf({ header, answers, totalMarks, percentage, isReaudit }) {
+async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, ambulansSebab, tbQuestions, auditLabel, totalMarks, nonTBTotal, percentage, isReaudit }) {
+
   await ensurePdfLibs();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -149,6 +150,6 @@ async function generateAuditPdf({ header, answers, totalMarks, percentage, isRea
       M, doc.internal.pageSize.getHeight()-14);
   }
 
-  const filename = [slugForFilename(header.klinik), slugForFilename(header.auditorName), header.tarikhAudit].join("-") + ".pdf";
+const filename = [slugForFilename(header.klinik), slugForFilename(header.namaPPP), header.tarikhAudit].join("-") + ".pdf";
   doc.save(filename);
 }
