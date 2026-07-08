@@ -33,7 +33,7 @@ async function generateAuditPdf({ header, answers, totalMarks, percentage, isRea
   // ── Header ───────────────────────────────────────────────────────────
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.text("SENARAI SEMAK AUDIT TEKNIKAL AMBULANS", M, 48);
+  doc.text((auditLabel || "SENARAI SEMAK AUDIT").toUpperCase(), M, 48);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
   doc.text("Jabatan Kesihatan Negeri Kedah" + (isReaudit ? "  |  RE-AUDIT" : ""), M, 62);
