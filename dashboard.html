@@ -88,19 +88,16 @@
     <div class="chart-card__sub">Peratus purata semua audit, dikumpul mengikut daerah</div>
     <canvas id="chart-daerah" height="220"></canvas>
   </div>
-
   <div class="card chart-card">
     <h3>Taburan Kategori</h3>
     <div class="chart-card__sub">Bilangan audit mengikut kategori pematuhan</div>
     <canvas id="chart-kategori" height="220"></canvas>
   </div>
-
   <div class="card chart-card">
     <h3>Trend Markah Mengikut Masa</h3>
     <div class="chart-card__sub">Peratus markah setiap audit mengikut tarikh</div>
     <canvas id="chart-trend" height="220"></canvas>
   </div>
-
   <div class="card chart-card">
     <h3>Soalan Paling Kerap Gagal</h3>
     <div class="chart-card__sub">Bilangan tanda "Tidak" merentas semua audit</div>
@@ -114,7 +111,14 @@
       <table class="data-table" id="audit-table">
         <thead>
           <tr>
-            <th>Tarikh</th><th>Daerah</th><th>Klinik</th><th>Nama PPP</th><th>Jenis Audit</th><th>Markah</th><th>Kategori</th>
+            <th>Tarikh</th>
+            <th>Daerah</th>
+            <th>Klinik</th>
+            <th>Nama PPP</th>
+            <th>Jenis Audit</th>
+            <th>Markah</th>
+            <th>Kategori</th>
+            <th></th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -123,11 +127,12 @@
   </div>
 </div>
 
+<!-- IMPORTANT: override GAS URL BEFORE api.js loads -->
 <script src="assets/js/config.js" onerror="console.error('config.js tidak dijumpai')"></script>
 <script src="assets/js/questions-data.js"></script>
 <script src="assets/js/spectrum.js"></script>
 <script>
-  window.APP_CONFIG.GAS_URL = window.APP_CONFIG.DASHBOARD_GAS_URL;
+  window.APP_CONFIG.GAS_URL    = window.APP_CONFIG.DASHBOARD_GAS_URL;
   window.APP_CONFIG.SHARED_TOKEN = window.APP_CONFIG.DASHBOARD_TOKEN;
 </script>
 <script src="assets/js/api.js"></script>
