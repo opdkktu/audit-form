@@ -236,9 +236,16 @@ function showDetail(submissionId) {
 
   const rowsHtml = rows.map(r => {
     const photos = r.photoURLs ? r.photoURLs.split(",").map(u => u.trim()).filter(Boolean) : [];
-    const photoHtml = photos.map(u =>
-      `<a href="${u}" target="_blank"><img src="${u}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;" onerror="this.style.display='none'"></a>`
-    ).join("");
+    const photoHtml = photos.map(u => {
+  const idMatch = u.match(/[?&]id=([^&]+)/);
+  const thumbSrc = idMatch
+    ? `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w200`
+    : u;
+  return `<a href="${u}" target="_blank" title="Buka foto penuh">
+    <img src="${thumbSrc}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;"
+      onerror="this.src='';this.style.background='#f0f0f0';this.style.display='inline-block';">
+  </a>`;
+}).join("");
     const pColor = r.penilaian === "YA" ? "#1e8e5a" : r.penilaian === "TIDAK" ? "#c0392b" : "#888";
     return `<tr style="border-bottom:1px solid #f0f0f0;">
       <td style="padding:7px 6px;font-size:12px;color:#666;white-space:nowrap;">${r.section||""}-${r.qNo}</td>
