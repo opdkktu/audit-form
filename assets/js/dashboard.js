@@ -277,6 +277,14 @@ function showDetail(submissionId) {
           Kategori: <strong>${sub.kategori}</strong>
         </span>
       </div>
+      ${[["✓ Kelebihan", sub.kelebihan], ["✗ Kekurangan", sub.kekurangan],
+         ["💡 Cadangan", sub.cadangan], ["🔧 Penambahbaikan", sub.penambahbaikan]]
+        .filter(([,v]) => v)
+        .map(([label, val]) => `
+          <div style="padding:10px 22px 0;">
+            <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">${label}</div>
+            <div style="font-size:13.5px;color:#333;line-height:1.5;padding:10px 14px;background:#f7faf9;border-radius:8px;border-left:3px solid #0b4f5c;">${val}</div>
+          </div>`).join("")}
       <div style="overflow-x:auto;padding:10px 22px 22px;">
         <table style="width:100%;border-collapse:collapse;font-family:inherit;">
           <thead>
