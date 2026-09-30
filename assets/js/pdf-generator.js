@@ -104,6 +104,35 @@ async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, am
   doc.text("Kategori: " + kategori.label, M+8, y+3);
   doc.setTextColor(0,0,0); y += 30;
 
+  
+  // ── Ringkasan Laporan Audit ─────────────────────────────────────────
+  if (ringkasan && Object.values(ringkasan).some(v => v)) {
+    if (y > 620) { doc.addPage(); y = 50; }
+    doc.setFont("helvetica","bold"); doc.setFontSize(11);
+    doc.text("Ringkasan Laporan Audit", M, y); y += 4;
+    doc.setDrawColor(11,79,92); doc.setLineWidth(0.8);
+    doc.line(M, y, W-M, y); y += 12;
+
+    const items = [
+      ["Kelebihan",      ringkasan.kelebihan],
+      ["Kekurangan",     ringkasan.kekurangan],
+      ["Cadangan",       ringkasan.cadangan],
+      ["Penambahbaikan", ringkasan.penambahbaikan]
+    ];
+    doc.setFontSize(9.5);
+    items.forEach(([label, val]) => {
+      if (!val) return;
+      if (y > 740) { doc.addPage(); y = 50; }
+      doc.setFont("helvetica","bold"); doc.text(label + ":", M, y); y += 13;
+      doc.setFont("helvetica","normal");
+      doc.splitTextToSize(val, W-M*2-10).forEach(line => {
+        if (y > 740) { doc.addPage(); y = 50; }
+        doc.text(line, M+8, y); y += 13;
+      });
+      y += 6;
+    });
+  }
+
   // ── Photo appendix (embedded images) ────────────────────────────────
   if (photoQueue.length) {
     doc.addPage();
