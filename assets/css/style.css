@@ -229,6 +229,7 @@ img { max-width: 100%; display: block; }
 
 .field input[type="text"],
 .field input[type="date"],
+.field input[type="email"],
 .field select,
 .field textarea {
   width: 100%;
