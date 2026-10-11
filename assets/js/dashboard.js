@@ -115,7 +115,10 @@ function renderProgress(subs) {
 
   document.getElementById("prog-year-label").textContent = year;
 
-  const yearSubs  = subs.filter(s => String(s.tarikhAudit).startsWith(String(year)));
+  const yearSubs = subs.filter(s => {
+  const p = String(s.tarikhAudit).split("/");
+  return p.length === 3 && p[2] === String(year);
+});
   const filtered  = daerah ? yearSubs.filter(s => s.daerah === daerah) : yearSubs;
   const auditedKK = new Set(filtered.map(s => s.klinik)).size;
 
