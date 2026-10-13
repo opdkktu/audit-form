@@ -44,11 +44,9 @@ let CHARTS = {};
       document.getElementById("pin-gate").remove();
       document.getElementById("dashboard-content").style.display = "block";
       setupFilters();
-      renderProgress(RAW.submissions);
-      renderTable(RAW.submissions);
       await Loading.withLoading("Menjana graf...", async () => {
         await loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js");
-        renderAll();
+        switchLevel("daerah");
       });
     } catch (err) {
       errEl.textContent = err.message === "PIN_SALAH" ? "PIN salah. Sila cuba lagi." : "Ralat: " + err.message;
@@ -89,6 +87,7 @@ function filteredSubmissions() {
   const klinik    = document.getElementById("filter-klinik").value;
   const auditType = document.getElementById("filter-audit-type").value;
   return RAW.submissions.filter(s =>
+    s.level !== "jkn" &&
     (!daerah    || s.daerah    === daerah)    &&
     (!klinik    || s.klinik    === klinik)    &&
     (!auditType || s.auditType === auditType)
@@ -115,10 +114,11 @@ function renderProgress(subs) {
 
   document.getElementById("prog-year-label").textContent = year;
 
-  const yearSubs = subs.filter(s => {
-  const p = String(s.tarikhAudit).split("/");
-  return p.length === 3 && p[2] === String(year);
-});
+  const yearSubs  = subs.filter(s => {
+    const parts = String(s.tarikhAudit).split("/");
+    return (parts.length === 3 && parts[2] === String(year)) ||
+           String(s.tarikhAudit).startsWith(String(year));
+  });
   const filtered  = daerah ? yearSubs.filter(s => s.daerah === daerah) : yearSubs;
   const auditedKK = new Set(filtered.map(s => s.klinik)).size;
 
@@ -239,16 +239,9 @@ function showDetail(submissionId) {
 
   const rowsHtml = rows.map(r => {
     const photos = r.photoURLs ? r.photoURLs.split(",").map(u => u.trim()).filter(Boolean) : [];
-    const photoHtml = photos.map(u => {
-  const idMatch = u.match(/[?&]id=([^&]+)/);
-  const thumbSrc = idMatch
-    ? `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w200`
-    : u;
-  return `<a href="${u}" target="_blank" title="Buka foto penuh">
-    <img src="${thumbSrc}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;"
-      onerror="this.src='';this.style.background='#f0f0f0';this.style.display='inline-block';">
-  </a>`;
-}).join("");
+    const photoHtml = photos.map(u =>
+      `<a href="${u}" target="_blank"><img src="${u}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;" onerror="this.style.display='none'"></a>`
+    ).join("");
     const pColor = r.penilaian === "YA" ? "#1e8e5a" : r.penilaian === "TIDAK" ? "#c0392b" : "#888";
     return `<tr style="border-bottom:1px solid #f0f0f0;">
       <td style="padding:7px 6px;font-size:12px;color:#666;white-space:nowrap;">${r.section||""}-${r.qNo}</td>
@@ -280,14 +273,6 @@ function showDetail(submissionId) {
           Kategori: <strong>${sub.kategori}</strong>
         </span>
       </div>
-      ${[["✓ Kelebihan", sub.kelebihan], ["✗ Kekurangan", sub.kekurangan],
-         ["💡 Cadangan", sub.cadangan], ["🔧 Penambahbaikan", sub.penambahbaikan]]
-        .filter(([,v]) => v)
-        .map(([label, val]) => `
-          <div style="padding:10px 22px 0;">
-            <div style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">${label}</div>
-            <div style="font-size:13.5px;color:#333;line-height:1.5;padding:10px 14px;background:#f7faf9;border-radius:8px;border-left:3px solid #0b4f5c;">${val}</div>
-          </div>`).join("")}
       <div style="overflow-x:auto;padding:10px 22px 22px;">
         <table style="width:100%;border-collapse:collapse;font-family:inherit;">
           <thead>
@@ -323,4 +308,113 @@ function renderTable(subs) {
         style="background:none;border:1.5px solid var(--color-border-strong);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:13px;" title="Lihat butiran">🔍</button></td>
     </tr>
   `).join("") || `<tr><td colspan="8" class="empty-state">Tiada audit dijumpai.</td></tr>`;
+}
+
+/* ── Level tab switching ──────────────────────────────────────────── */
+let ACTIVE_LEVEL = "daerah";
+
+function switchLevel(level) {
+  ACTIVE_LEVEL = level;
+  document.getElementById("tab-daerah").classList.toggle("is-active", level === "daerah");
+  document.getElementById("tab-jkn").classList.toggle("is-active", level === "jkn");
+  document.getElementById("progress-section").style.display = level === "daerah" ? "" : "none";
+  document.getElementById("jkn-section").style.display = level === "jkn" ? "" : "none";
+
+  const mainSections = ["kpi-grid","dashboard-spectrum",".filter-row","#chart-daerah","#chart-kategori","#chart-trend","#chart-failpoints"].map(s=>document.querySelector(s)?.closest?.(".card")||document.querySelector(s));
+
+  // Show/hide charts and table for daerah mode
+  document.querySelectorAll(".chart-card").forEach(el => el.style.display = level === "daerah" ? "" : "none");
+  // kpi-grid and spectrum shown always
+  if (level === "jkn") {
+    renderJknAnalysis();
+  } else {
+    renderAll();
+  }
+}
+
+/* ── JKN Analysis ─────────────────────────────────────────────────── */
+function renderJknAnalysis() {
+  const jknSubs    = RAW.submissions.filter(s => s.level === "jkn");
+  const daerahSubs = RAW.submissions.filter(s => s.level !== "jkn");
+
+  // KPI for JKN
+  renderKpis(jknSubs);
+
+  // Summary: count per form type
+  const byCat = {};
+  jknSubs.forEach(s => { byCat[s.auditLabel] = (byCat[s.auditLabel]||0)+1; });
+  const sumHtml = Object.entries(byCat).map(([label, n]) =>
+    `<div style="display:inline-flex;align-items:center;gap:8px;background:var(--color-primary-tint);border-radius:8px;padding:8px 14px;margin:4px 4px 4px 0;font-size:13px;">
+       <span style="font-weight:700;font-size:18px;">${n}</span> ${label}
+     </div>`
+  ).join("") || `<p style="color:var(--color-text-faint);font-size:13px;">Belum ada audit JKN.</p>`;
+  document.getElementById("jkn-summary").innerHTML = sumHtml;
+
+  // Comparison table
+  const compDiv = document.getElementById("jkn-comparison");
+  if (!jknSubs.length || !daerahSubs.length) {
+    compDiv.innerHTML = `<p style="color:var(--color-text-faint);font-size:13px;padding:12px 0;">Data tidak mencukupi untuk perbandingan. Perlukan audit daerah DAN JKN untuk KK yang sama.</p>`;
+    return;
+  }
+
+  // Build lookup: klinik+type → { daerah: avg%, jkn: avg% }
+  function avgByKey(subs) {
+    const map = {};
+    subs.forEach(s => {
+      const key = s.klinik + "|||" + s.auditType;
+      if (!map[key]) map[key] = { daerah:s.daerah, klinik:s.klinik, type:s.auditLabel, scores:[] };
+      map[key].scores.push(Number(s.percentage));
+    });
+    return map;
+  }
+  const daerahMap = avgByKey(daerahSubs);
+  const jknMap    = avgByKey(jknSubs);
+
+  // Find common KK+type pairs
+  const rows = [];
+  Object.keys(jknMap).forEach(key => {
+    if (!daerahMap[key]) return;
+    const d = daerahMap[key];
+    const j = jknMap[key];
+    const dAvg = Math.round(d.scores.reduce((a,b)=>a+b,0)/d.scores.length);
+    const jAvg = Math.round(j.scores.reduce((a,b)=>a+b,0)/j.scores.length);
+    rows.push({ daerah:d.daerah, klinik:d.klinik, type:d.type, daerahAvg:dAvg, jknAvg:jAvg, diff:jAvg-dAvg });
+  });
+
+  if (!rows.length) {
+    compDiv.innerHTML = `<p style="color:var(--color-text-faint);font-size:13px;padding:12px 0;">Tiada KK yang sama diaudit oleh kedua-dua peringkat daerah dan JKN.</p>`;
+    return;
+  }
+
+  // Group by daerah
+  const grouped = {};
+  rows.forEach(r => { (grouped[r.daerah] = grouped[r.daerah]||[]).push(r); });
+
+  let html = `<div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="border-bottom:2px solid var(--color-border);">
+        <th style="text-align:left;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">DAERAH / KLINIK</th>
+        <th style="text-align:left;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">JENIS AUDIT</th>
+        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">MARKAH DAERAH</th>
+        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">MARKAH JKN</th>
+        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">BEZA</th>
+      </tr></thead><tbody>`;
+
+  Object.keys(grouped).sort().forEach(d => {
+    html += `<tr><td colspan="5" style="padding:9px 8px 4px;font-weight:700;color:var(--color-primary-dark);font-size:12px;letter-spacing:.04em;text-transform:uppercase;">${d}</td></tr>`;
+    grouped[d].forEach(r => {
+      const diffColor = r.diff > 0 ? "#1e8e5a" : r.diff < 0 ? "#c0392b" : "#888";
+      const diffText  = (r.diff > 0 ? "+" : "") + r.diff + "%";
+      html += `<tr style="border-bottom:1px solid var(--color-border);">
+        <td style="padding:7px 8px;padding-left:18px;">${r.klinik}</td>
+        <td style="padding:7px 8px;"><span style="font-size:11px;background:var(--color-primary-tint);color:var(--color-primary-dark);padding:2px 8px;border-radius:99px;">${r.type}</span></td>
+        <td style="padding:7px 8px;text-align:center;font-weight:600;">${r.daerahAvg}%</td>
+        <td style="padding:7px 8px;text-align:center;font-weight:600;">${r.jknAvg}%</td>
+        <td style="padding:7px 8px;text-align:center;font-weight:700;color:${diffColor};">${diffText}</td>
+      </tr>`;
+    });
+  });
+
+  html += `</tbody></table></div>`;
+  compDiv.innerHTML = html;
 }
