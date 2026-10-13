@@ -1,11 +1,5 @@
 name: Deploy to GitHub Pages
 
-# This workflow is the reason the Apps Script URL never has to live in
-# your repository source code. It reads two GitHub repository Secrets
-# (Settings ▸ Secrets and variables ▸ Actions) and writes them into
-# assets/js/config.js ONLY inside this temporary build, right before
-# publishing — config.js itself is never committed to the repo.
-
 on:
   push:
     branches: ["main"]
@@ -32,10 +26,16 @@ jobs:
 
       - name: Generate config.js from repository secrets
         run: |
+          mkdir -p assets/js
           cat > assets/js/config.js <<EOF
           window.APP_CONFIG = {
-            GAS_URL: "${{ secrets.GAS_URL }}",
-            SHARED_TOKEN: "${{ secrets.SHARED_TOKEN }}"
+            FORM1_GAS_URL:     "${{ secrets.FORM1_GAS_URL }}",
+            FORM2_GAS_URL:     "${{ secrets.FORM2_GAS_URL }}",
+            FORM1_JKN_GAS_URL: "${{ secrets.FORM1_JKN_GAS_URL }}",
+            FORM2_JKN_GAS_URL: "${{ secrets.FORM2_JKN_GAS_URL }}",
+            DASHBOARD_GAS_URL: "${{ secrets.DASHBOARD_GAS_URL }}",
+            SHARED_TOKEN:      "${{ secrets.SHARED_TOKEN }}",
+            DASHBOARD_TOKEN:   "${{ secrets.DASHBOARD_TOKEN }}"
           };
           EOF
 
