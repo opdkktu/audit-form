@@ -80,7 +80,7 @@ async function init() {
     STATE.answers[q.no] = { penilaian:null, tindakSusul:null, catatan:"", photos:[] };
   }));
 
-  renderStepPills();
+  StepPills();
   try {
     await Loading.withLoading("Memuatkan senarai daerah & klinik...", async () => {
       const res = await Api.gasGet("getMasterData");
@@ -427,13 +427,24 @@ function syncGroup(card, group) {
 function renderThumbs(card, qNo) {
   const ans = STATE.answers[qNo];
   const wrap = card.querySelector(".photo-thumbs");
-  wrap.innerHTML = ans.photos.map((p,i) => `
+  wrap.innerHTML = ans.photos.map((p, i) => `
     <div class="photo-thumb">
-      <img src="${p.dataUrl}" alt="Foto ${i+1}">
-      <button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>
+      ${p.uploading
+        ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#eaf1f0;flex-direction:column;gap:2px;">
+             <div class="loading-spinner" style="width:22px;height:22px;border-width:3px;"></div>
+             <span style="font-size:9px;color:#5b6e6b;">Muat naik...</span>
+           </div>`
+        : `<img src="${p.dataUrl || p.url}" alt="Foto ${i+1}">
+           ${p.url ? '<div style="position:absolute;bottom:2px;right:2px;background:#1e8e5a;color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;">✓</div>' : ''}`
+      }
+      ${p.uploading ? '' : `<button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>`}
     </div>`).join("");
+
   wrap.querySelectorAll(".photo-thumb__remove").forEach(btn =>
-    btn.addEventListener("click", () => { ans.photos.splice(Number(btn.dataset.idx),1); renderThumbs(card,qNo); }));
+    btn.addEventListener("click", () => {
+      ans.photos.splice(Number(btn.dataset.idx), 1);
+      renderThumbs(card, qNo);
+    }));
 }
 
 function compressImage(file, maxDim=1280, quality=0.72) {
