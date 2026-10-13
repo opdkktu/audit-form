@@ -227,16 +227,37 @@ function buildQuestionCard(q) {
   card.querySelector("textarea").addEventListener("input", e => { ans.catatan=e.target.value; });
   renderThumbs(card, q.no);
   card.querySelector('input[type="file"]').addEventListener("change", async e => {
-    const files = Array.from(e.target.files||[]);
-    if (!files.length) return;
-    await Loading.withLoading("Memampatkan foto...", async () => {
-      for (const f of files) {
-        try { ans.photos.push({ dataUrl: await compressImage(f), filename: f.name }); }
-        catch(err) { console.error(err); }
+  const files = Array.from(e.target.files||[]);
+  if (!files.length) return;
+
+  for (const f of files) {
+    // 1. Compress first
+    let dataUrl;
+    try {
+      dataUrl = await compressImage(f);
+    } catch(err) { console.error(err); continue; }
+
+    // 2. Add as "uploading" immediately so user sees it
+    const idx = ans.photos.length;
+    ans.photos.push({ dataUrl, filename: f.name, uploading: true, url: null });
+    renderThumbs(card, q.no);
+
+    // 3. Upload to Drive in background
+    try {
+      const res = await Api.gasPost("uploadPhoto", { dataUrl, filename: f.name });
+      if (res.success) {
+        ans.photos[idx].url = res.url;
+        ans.photos[idx].dataUrl = null; // free memory — URL saved in Drive
       }
-    });
-    renderThumbs(card, q.no); e.target.value="";
-  });
+    } catch(err) {
+      console.error("Upload failed, keeping local:", err);
+    } finally {
+      ans.photos[idx].uploading = false;
+      renderThumbs(card, q.no);
+    }
+  }
+  e.target.value = "";
+});
   return card;
 }
 
