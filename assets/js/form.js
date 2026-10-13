@@ -639,7 +639,7 @@ async function submitAudit() {
           penilaian: a.penilaian || "",
           tindakSusul: a.tindakSusul || "",
           catatan: a.catatan,
-          photos: (a.photos||[]).map(p=>({ dataUrl:p.dataUrl, filename:p.filename }))
+          photos: (a.photos||[]).map(p=>({ url: p.url,dataUrl:p.dataUrl, filename:p.filename }))
         }))
       };
       const res = await Api.gasPost("submitAudit", payload);
