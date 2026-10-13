@@ -80,7 +80,7 @@ async function init() {
     STATE.answers[q.no] = { penilaian:null, tindakSusul:null, catatan:"", photos:[] };
   }));
 
-  StepPills();
+  renderStepPills();
   try {
     await Loading.withLoading("Memuatkan senarai daerah & klinik...", async () => {
       const res = await Api.gasGet("getMasterData");
