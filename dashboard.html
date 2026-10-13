@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Analisis — JKN Kedah</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<!-- PIN gate (shown first, removed once PIN is verified) -->
+<div class="pin-gate" id="pin-gate">
+  <div class="card">
+    <h2 style="text-align:center;margin-bottom:6px;">Dashboard Negeri</h2>
+    <p style="text-align:center;color:var(--color-text-muted);font-size:13.5px;">Masukkan PIN peringkat negeri untuk teruskan</p>
+    <form id="pin-form">
+      <div class="pin-dots">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" autocomplete="off">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" autocomplete="off">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" autocomplete="off">
+        <input type="password" inputmode="numeric" maxlength="1" class="pin-digit" autocomplete="off">
+      </div>
+      <div id="pin-error" class="alert alert-danger" style="display:none;">PIN salah. Sila cuba lagi.</div>
+      <button type="submit" class="btn btn-primary btn-block">Buka Dashboard</button>
+    </form>
+  </div>
+</div>
+
+<!-- Dashboard content (hidden until PIN verified) -->
+<div class="app-shell" id="dashboard-content" style="display:none;">
+  <header class="app-header">
+    <div class="app-header__logo">
+      <img src="assets/img/logo.png" alt="" onerror="this.parentElement.textContent='JKN'">
+    </div>
+    <div>
+      <div class="app-header__title">Dashboard Analisis Negeri</div>
+      <div class="app-header__subtitle">Audit Teknikal Ambulans — JKN Kedah</div>
+    </div>
+  </header>
+
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <h3 style="margin-bottom:2px;">Purata Markah Negeri</h3>
+    <div class="chart-card__sub">Kedudukan purata semua audit (tertapis) pada skala pematuhan rasmi</div>
+    <div class="spectrum" id="dashboard-spectrum"></div>
+  </div>
+
+  <div class="filter-row">
+    <select id="filter-daerah"><option value="">Semua Daerah</option></select>
+    <select id="filter-klinik"><option value="">Semua Klinik</option></select>
+  </div>
+
+  <div class="card chart-card">
+    <h3>Purata Markah Mengikut Daerah</h3>
+    <div class="chart-card__sub">Peratus purata semua audit, dikumpul mengikut daerah</div>
+    <canvas id="chart-daerah" height="220"></canvas>
+  </div>
+
+  <div class="card chart-card">
+    <h3>Taburan Kategori</h3>
+    <div class="chart-card__sub">Bilangan audit mengikut kategori pematuhan</div>
+    <canvas id="chart-kategori" height="220"></canvas>
+  </div>
+
+  <div class="card chart-card">
+    <h3>Trend Markah Mengikut Masa</h3>
+    <div class="chart-card__sub">Peratus markah setiap audit mengikut tarikh</div>
+    <canvas id="chart-trend" height="220"></canvas>
+  </div>
+
+  <div class="card chart-card">
+    <h3>Soalan Paling Kerap Gagal</h3>
+    <div class="chart-card__sub">Bilangan tanda "Tidak" bagi setiap soalan, merentas semua audit</div>
+    <canvas id="chart-failpoints" height="280"></canvas>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:10px;">Senarai Audit</h3>
+    <div class="table-wrap">
+      <table class="data-table" id="audit-table">
+        <thead>
+          <tr>
+            <th>Tarikh</th><th>Daerah</th><th>Klinik</th><th>Auditor</th><th>Markah</th><th>Kategori</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/config.js" onerror="console.error('config.js tidak dijumpai — lihat README.md')"></script>
+<script src="assets/js/questions-data.js"></script>
+<script src="assets/js/spectrum.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/dashboard.js"></script>
+</body>
+</html>
