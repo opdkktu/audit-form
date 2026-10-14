@@ -682,6 +682,12 @@ async function submitAudit() {
       return { ...res, nonTBTotal };
     });
     STATE.result = result;
+    // fire-and-forget: server builds the PDF and emails it (does not delay the result page)
+    if (STATE.header.emelAuditor && result.submissionId) {
+      Api.gasPost("emailAudit", { submissionId: result.submissionId })
+        .then(r => { if (r && r.success) toast("📎 PDF laporan dihantar ke emel anda.", "ok"); })
+        .catch(() => { /* will be retried by the pending-email job */ });
+    }
     renderResultStep();
   } catch(err) { toast("Gagal menghantar: "+err.message, "error"); }
 }
