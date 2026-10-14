@@ -54,7 +54,28 @@
     return res.json();
   }
 
-  window.Api = { gasGet, gasPost };
+  /* ---------------------------------------------------------------- */
+  /* Google Drive photo helpers                                        */
+  /* Stored URL looks like https://drive.google.com/uc?id=FILE_ID      */
+  /* which is a DOWNLOAD endpoint and cannot be used in <img>.         */
+  /* ---------------------------------------------------------------- */
+  function driveId(url) {
+    const m = String(url || "").match(/[?&]id=([\w-]+)/) || String(url || "").match(/\/d\/([\w-]+)/);
+    return m ? m[1] : null;
+  }
+  function driveThumb(url, size) {
+    const id = driveId(url);
+    return id ? "https://drive.google.com/thumbnail?id=" + id + "&sz=w" + (size || 300) : (url || "");
+  }
+  function driveAlt(url, size) {
+    const id = driveId(url);
+    return id ? "https://lh3.googleusercontent.com/d/" + id + "=w" + (size || 300) : (url || "");
+  }
+  function escapeHtml(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  window.Api = { gasGet, gasPost, driveId, driveThumb, driveAlt, escapeHtml };
 
   /* ---------------------------------------------------------------- */
   /* Loading overlay                                                  */
