@@ -1,3 +1,23 @@
+/* ── Safety shim: works even if a stale/cached api.js is loaded ───── */
+(function () {
+  window.Api = window.Api || {};
+  if (typeof Api.driveId !== "function") Api.driveId = function (url) {
+    const m = String(url || "").match(/[?&]id=([\w-]+)/) || String(url || "").match(/\/d\/([\w-]+)/);
+    return m ? m[1] : null;
+  };
+  if (typeof Api.driveThumb !== "function") Api.driveThumb = function (url, size) {
+    const id = Api.driveId(url);
+    return id ? "https://drive.google.com/thumbnail?id=" + id + "&sz=w" + (size || 300) : (url || "");
+  };
+  if (typeof Api.driveAlt !== "function") Api.driveAlt = function (url, size) {
+    const id = Api.driveId(url);
+    return id ? "https://lh3.googleusercontent.com/d/" + id + "=w" + (size || 300) : (url || "");
+  };
+  if (typeof Api.escapeHtml !== "function") Api.escapeHtml = function (v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  };
+})();
+
 /**
  * dashboard.js — Merged dashboard (Ambulans + Kecemasan + future forms)
  *
