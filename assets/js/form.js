@@ -30,16 +30,14 @@
 //     CARA EDIT: Salin nombor soalan yang bersesuaian ke dalam array bawah.
 //     Contoh siap guna: const TB_WHEN_TIADA = [1,3,4,5,6,8,9,11,13,15,16,17];
 // ─────────────────────────────────────────────────────────────────────────
-const TB_WHEN_TIADA = [];
-
+window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
+const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 const TB_VAL = "TIDAK_BERKENAAN";
 
 const STATE = {
   auditType: "audit",
-  trialMode: false,
-  level: "daerah",
   masterData: { daerah: [], klinikByDaerah: {} },
-  header: { daerah:"", klinik:"", namaPPP:"", tempatBertugas:"", emelAuditor:"", tarikhAudit:"" },
+  header: { daerah:"", klinik:"", namaPPP:"", tempatBertugas:"", emelAuditor:"",tarikhAudit:"" },
   ambulansStatus: null,   // "bersedia" | "tiada"
   ambulansSebab: "",
   answers: {},
@@ -74,20 +72,8 @@ function isTB(qNo) {
 async function init() {
   const params = new URLSearchParams(location.search);
   STATE.auditType = params.get("type") === "reaudit" ? "reaudit" : "audit";
-  STATE.trialMode = params.get("trial") === "1";
-  STATE.level = params.get("level") === "jkn" ? "jkn" : "daerah";
-  if (STATE.level === "jkn" && window.APP_CONFIG && window.APP_CONFIG.FORM1_JKN_GAS_URL) {
-    window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_JKN_GAS_URL;
-  }
-  const badgeLevel = STATE.level === "jkn" ? " · Peringkat JKN" : "";
   document.getElementById("auditor-badge").textContent =
-    (STATE.auditType === "reaudit" ? "Re-Audit (Penyelia)" : "Audit Teknikal") + badgeLevel;
-  if (STATE.trialMode) {
-    document.body.insertAdjacentHTML("afterbegin",
-      `<div style="position:fixed;top:10px;right:10px;z-index:9999;background:#e74c3c;color:#fff;font-weight:700;font-size:12px;letter-spacing:.08em;padding:6px 14px;border-radius:99px;box-shadow:0 2px 10px rgba(231,76,60,.5);pointer-events:none;animation:_demoblink 1s ease-in-out infinite;">● DEMO</div>` +
-      `<style>@keyframes _demoblink{0%,100%{opacity:1}50%{opacity:.3}}</style>`
-    );
-  }
+    STATE.auditType === "reaudit" ? "Re-Audit (Penyelia)" : "Audit Teknikal";
   STATE.header.tarikhAudit = todayISO();
 
   AUDIT_SECTIONS.forEach(sec => sec.questions.forEach(q => {
@@ -181,11 +167,10 @@ function renderInfoStep(c) {
       <div class="field"><label for="f-klinik">Klinik Dilawati</label>
         <select id="f-klinik"><option value="">— Pilih Daerah dahulu —</option></select>
       </div>
-      <div class="field"><label for="f-nama-ppp">Nama PPP / Auditor</label>
+      <div class="field"><label for="f-nama-ppp">Nama Auditor PPP</label>
         <input type="text" id="f-nama-ppp" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.namaPPP}">
-        <div class="field-hint">Akan ditukar huruf besar secara automatik.</div>
       </div>
-      <div class="field"><label for="f-tempat">Tempat Bertugas Auditor</label>
+       <div class="field"><label for="f-tempat">Tempat Bertugas Auditor</label>
         <input type="text" id="f-tempat" class="input-uppercase" placeholder="CONTOH: KK BANDAR BAHARU" value="${STATE.header.tempatBertugas}">
       </div>
       <div class="field"><label for="f-emel">Emel Auditor</label>
@@ -198,6 +183,7 @@ function renderInfoStep(c) {
     </div>
     <div class="btn-row"><button class="btn btn-primary btn-block" id="btn-next">Seterusnya →</button></div>
   `);
+
 
   const daerahSel = document.getElementById("f-daerah");
   const klinikSel = document.getElementById("f-klinik");
@@ -221,13 +207,14 @@ function renderInfoStep(c) {
     const p = tempatEl.selectionStart; tempatEl.value = tempatEl.value.toUpperCase(); tempatEl.setSelectionRange(p,p);
     STATE.header.tempatBertugas = tempatEl.value;
   });
+
   document.getElementById("f-emel").addEventListener("input", e => { STATE.header.emelAuditor = e.target.value; });
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
 function validateInfo() {
-  if (!STATE.header.daerah)           { toast("Sila pilih Daerah.","error"); return false; }
-  if (!STATE.header.klinik)           { toast("Sila pilih Klinik.","error"); return false; }
-  if (!STATE.header.namaPPP.trim())   { toast("Sila isi Nama PPP / Auditor.","error"); return false; }
+  if (!STATE.header.daerah)       { toast("Sila pilih Daerah.","error"); return false; }
+  if (!STATE.header.klinik)       { toast("Sila pilih Klinik.","error"); return false; }
+  if (!STATE.header.namaPPP.trim()){ toast("Sila isi Nama PPP / Auditor.","error"); return false; }
   if (!STATE.header.tempatBertugas.trim()) { toast("Sila isi Tempat Bertugas.","error"); return false; }
   return true;
 }
@@ -374,7 +361,7 @@ function buildQuestionCard(q) {
     <div class="photo-zone">
       <div class="photo-thumbs"></div>
       <label class="photo-add-btn">📷 Tambah Foto
-        <input type="file" accept="image/*" capture="environment" multiple style="display:none;">
+        <input type="file" accept="image/*" multiple style="display:none;">
       </label>
     </div>
   `;
@@ -397,28 +384,37 @@ function buildQuestionCard(q) {
   card.querySelector("textarea").addEventListener("input", e => { ans.catatan=e.target.value; });
   renderThumbs(card, q.no);
   card.querySelector('input[type="file"]').addEventListener("change", async e => {
-    const files = Array.from(e.target.files||[]);
-    if (!files.length) return;
-    for (const f of files) {
-      let dataUrl;
-      try { dataUrl = await compressImage(f); } catch(err) { console.error(err); continue; }
-      const photo = { dataUrl, filename: f.name, uploading: !STATE.trialMode };
-      ans.photos.push(photo);
-      renderThumbs(card, q.no);
-      if (!STATE.trialMode) {
-        const idx = ans.photos.length - 1;
-        Api.gasPost("uploadPhoto", { dataUrl, filename: f.name })
-          .then(res => {
-            if (res.success) { ans.photos[idx].url = res.url; ans.photos[idx].dataUrl = null; }
-          })
-          .catch(err => { console.error("Upload failed, keeping local:", err); })
-          .finally(() => { ans.photos[idx].uploading = false; renderThumbs(card, q.no); });
-      } else {
-        photo.uploading = false;
+  const files = Array.from(e.target.files||[]);
+  if (!files.length) return;
+
+  for (const f of files) {
+    // 1. Compress first
+    let dataUrl;
+    try {
+      dataUrl = await compressImage(f);
+    } catch(err) { console.error(err); continue; }
+
+    // 2. Add as "uploading" immediately so user sees it
+    const idx = ans.photos.length;
+    ans.photos.push({ dataUrl, filename: f.name, uploading: true, url: null });
+    renderThumbs(card, q.no);
+
+    // 3. Upload to Drive in background
+    try {
+      const res = await Api.gasPost("uploadPhoto", { dataUrl, filename: f.name });
+      if (res.success) {
+        ans.photos[idx].url = res.url;
+        ans.photos[idx].dataUrl = null; // free memory — URL saved in Drive
       }
+    } catch(err) {
+      console.error("Upload failed, keeping local:", err);
+    } finally {
+      ans.photos[idx].uploading = false;
+      renderThumbs(card, q.no);
     }
-    e.target.value="";
-  });
+  }
+  e.target.value = "";
+});
   return card;
 }
 
@@ -443,8 +439,12 @@ function renderThumbs(card, qNo) {
       }
       ${p.uploading ? '' : `<button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>`}
     </div>`).join("");
+
   wrap.querySelectorAll(".photo-thumb__remove").forEach(btn =>
-    btn.addEventListener("click", () => { ans.photos.splice(Number(btn.dataset.idx), 1); renderThumbs(card, qNo); }));
+    btn.addEventListener("click", () => {
+      ans.photos.splice(Number(btn.dataset.idx), 1);
+      renderThumbs(card, qNo);
+    }));
 }
 
 function compressImage(file, maxDim=1280, quality=0.72) {
@@ -522,7 +522,42 @@ function renderRingkasanStep(c) {
   document.getElementById("btn-back").addEventListener("click", prevStep);
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
+function launchFireworks() {
+          const duration = 5 * 1000; // The fireworks show will last for 5 seconds
+          const animationEnd = Date.now() + duration;
+          const defaults = { 
+            startVelocity: 30, 
+            spread: 360, 
+            ticks: 60, 
+            zIndex: 1001 
+          };
 
+          function randomInRange(min, max) {
+            return Math.random() * (max - min) + min;
+          }
+
+          const interval = setInterval(function() {
+            const timeLeft = animationEnd - Date.now();
+
+            if (timeLeft <= 0) {
+              return clearInterval(interval);
+            }
+
+            const particleCount = 50 * (timeLeft / duration);
+    
+            // Launch a firework from the left side
+            confetti(Object.assign({}, defaults, { 
+              particleCount, 
+              origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } 
+            }));
+    
+            // Launch a firework from the right side
+            confetti(Object.assign({}, defaults, { 
+              particleCount, 
+              origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } 
+            }));
+          }, 250); // Launch new fireworks every 250ms
+        }
 /* ── Step 6: Semak & Hantar ───────────────────────────────────────── */
 function renderReviewStep(c) {
   const marks = totalMarks();
@@ -585,21 +620,11 @@ function renderReviewStep(c) {
 
 /* ── Submit ───────────────────────────────────────────────────────── */
 async function submitAudit() {
-  // TRIAL MODE: skip real GAS call
-  if (STATE.trialMode) {
-    const nonTBTotal = Object.keys(STATE.answers).filter(no => !isTB(Number(no))).length;
-    const marks = totalMarks();
-    const pct = nonTBTotal ? Math.round(marks/nonTBTotal*100) : 0;
-    STATE.result = { submissionId:"DEMO-"+Date.now(), totalMarks:marks, nonTBTotal, percentage:pct };
-    renderResultStep();
-    return;
-  }
   try {
     const nonTBTotal = Object.keys(STATE.answers).filter(no => !isTB(Number(no))).length;
     const result = await Loading.withLoading("Menghantar audit & memuat naik foto...", async () => {
       const payload = {
         auditType: STATE.auditType,
-        level: STATE.level,
         daerah: STATE.header.daerah,
         klinik: STATE.header.klinik,
         namaPPP: STATE.header.namaPPP,
@@ -614,7 +639,7 @@ async function submitAudit() {
           penilaian: a.penilaian || "",
           tindakSusul: a.tindakSusul || "",
           catatan: a.catatan,
-          photos: (a.photos||[]).map(p=>({ url:p.url||null, dataUrl:p.dataUrl||null, filename:p.filename }))
+          photos: (a.photos||[]).map(p=>({ url: p.url,dataUrl:p.dataUrl, filename:p.filename }))
         }))
       };
       const res = await Api.gasPost("submitAudit", payload);
@@ -667,7 +692,7 @@ function renderResultStep() {
       <button class="btn btn-ghost btn-block" id="btn-new">← Borang Baru</button>
     </div>
   `);
-
+launchFireworks();
   renderSpectrum(document.getElementById("result-spectrum"), r.percentage);
   document.querySelectorAll(".step-pill").forEach(el => el.classList.add("is-done"));
   document.getElementById("progress-fill").style.width="100%";
@@ -705,11 +730,11 @@ function renderResultStep() {
           ambulansStatus: STATE.ambulansStatus,
           ambulansSebab: STATE.ambulansSebab,
           tbQuestions: TB_WHEN_TIADA,
+          auditLabel: "Audit Ambulans",
           totalMarks: r.totalMarks,
           nonTBTotal: r.nonTBTotal || TOTAL_QUESTIONS,
           percentage: r.percentage,
-          isReaudit: STATE.auditType==="reaudit",
-          isDemo: STATE.trialMode
+          isReaudit: STATE.auditType==="reaudit"
         });
       });
     } catch(err){ toast("Gagal menjana PDF: "+err.message,"error"); }
@@ -717,5 +742,4 @@ function renderResultStep() {
 
   document.getElementById("btn-new").addEventListener("click", ()=>location.href="ambulans.html");
 }
-
 init();
