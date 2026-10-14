@@ -1,14 +1,8 @@
-/**
- * form2.js — Audit Kecemasan wizard
- * Based on form.js — TB/ambulans logic removed, all questions mandatory
- */
-
+window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM2_GAS_URL;
 const STATE = {
   auditType: "kecemasan",
-  trialMode: false,
-  level: "daerah",
   masterData: { daerah: [], klinikByDaerah: {} },
-  header: { daerah:"", klinik:"", namaPPP:"", tempatBertugas:"", emelAuditor:"", tarikhAudit:"" },
+  header: { daerah:"", klinik:"", namaPPP:"", tempatBertugas:"", emelAuditor:"",tarikhAudit:"" },
   answers: {},
   ringkasan: { kelebihan:"", kekurangan:"", cadangan:"", penambahbaikan:"" },
   currentStep: 0,
@@ -20,6 +14,7 @@ const STEPS = [
   { key:"section",   sectionIndex:0, label:"A" },
   { key:"section",   sectionIndex:1, label:"B" },
   { key:"section",   sectionIndex:2, label:"C" },
+  { key:"section",   sectionIndex:3, label:"D" },
   { key:"ringkasan", label:"Ringkasan" },
   { key:"review",    label:"Semak"     }
 ];
@@ -35,20 +30,7 @@ function todayDisplay() {
 
 /* ── Init ─────────────────────────────────────────────────────────── */
 async function init() {
-  const params = new URLSearchParams(location.search);
-  STATE.trialMode = params.get("trial") === "1";
-  STATE.level = params.get("level") === "jkn" ? "jkn" : "daerah";
-  if (STATE.level === "jkn" && window.APP_CONFIG && window.APP_CONFIG.FORM2_JKN_GAS_URL) {
-    window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM2_JKN_GAS_URL;
-  }
-  const badgeLevel = STATE.level === "jkn" ? " · Peringkat JKN" : "";
-  document.getElementById("auditor-badge").textContent = "Audit Kecemasan" + badgeLevel;
-  if (STATE.trialMode) {
-    document.body.insertAdjacentHTML("afterbegin",
-      `<div style="position:fixed;top:10px;right:10px;z-index:9999;background:#e74c3c;color:#fff;font-weight:700;font-size:12px;letter-spacing:.08em;padding:6px 14px;border-radius:99px;box-shadow:0 2px 10px rgba(231,76,60,.5);pointer-events:none;animation:_demoblink 1s ease-in-out infinite;">● DEMO</div>` +
-      `<style>@keyframes _demoblink{0%,100%{opacity:1}50%{opacity:.3}}</style>`
-    );
-  }
+  document.getElementById("auditor-badge").textContent = "Audit Kecemasan";
   STATE.header.tarikhAudit = todayISO();
 
   AUDIT_SECTIONS.forEach(sec => sec.questions.forEach(q => {
@@ -124,11 +106,10 @@ function renderInfoStep(c) {
       <div class="field"><label for="f-klinik">Klinik Dilawati</label>
         <select id="f-klinik"><option value="">— Pilih Daerah dahulu —</option></select>
       </div>
-      <div class="field"><label for="f-nama-ppp">Nama PPP / Auditor</label>
+      <div class="field"><label for="f-nama-ppp">Nama Auditor PPP</label>
         <input type="text" id="f-nama-ppp" class="input-uppercase" placeholder="NAMA PENUH" value="${STATE.header.namaPPP}">
-        <div class="field-hint">Akan ditukar huruf besar secara automatik.</div>
       </div>
-      <div class="field"><label for="f-tempat">Tempat Bertugas Auditor</label>
+       <div class="field"><label for="f-tempat">Tempat Bertugas Auditor</label>
         <input type="text" id="f-tempat" class="input-uppercase" placeholder="CONTOH: KK BANDAR BAHARU" value="${STATE.header.tempatBertugas}">
       </div>
       <div class="field"><label for="f-emel">Emel Auditor</label>
@@ -159,7 +140,7 @@ function renderInfoStep(c) {
     const p = namaPPP.selectionStart; namaPPP.value = namaPPP.value.toUpperCase(); namaPPP.setSelectionRange(p,p);
     STATE.header.namaPPP = namaPPP.value;
   });
-  const tempatEl = document.getElementById("f-tempat");
+   const tempatEl = document.getElementById("f-tempat");
   tempatEl.addEventListener("input", () => {
     const p = tempatEl.selectionStart; tempatEl.value = tempatEl.value.toUpperCase(); tempatEl.setSelectionRange(p,p);
     STATE.header.tempatBertugas = tempatEl.value;
@@ -168,9 +149,9 @@ function renderInfoStep(c) {
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
 function validateInfo() {
-  if (!STATE.header.daerah)               { toast("Sila pilih Daerah.","error"); return false; }
-  if (!STATE.header.klinik)               { toast("Sila pilih Klinik.","error"); return false; }
-  if (!STATE.header.namaPPP.trim())       { toast("Sila isi Nama PPP / Auditor.","error"); return false; }
+  if (!STATE.header.daerah)        { toast("Sila pilih Daerah.","error"); return false; }
+  if (!STATE.header.klinik)        { toast("Sila pilih Klinik.","error"); return false; }
+  if (!STATE.header.namaPPP.trim()){ toast("Sila isi Nama PPP / Auditor.","error"); return false; }
   if (!STATE.header.tempatBertugas.trim()){ toast("Sila isi Tempat Bertugas.","error"); return false; }
   return true;
 }
@@ -223,7 +204,7 @@ function buildQuestionCard(q) {
     <div class="photo-zone">
       <div class="photo-thumbs"></div>
       <label class="photo-add-btn">📷 Tambah Foto
-        <input type="file" accept="image/*" capture="environment" multiple style="display:none;">
+        <input type="file" accept="image/*" multiple style="display:none;">
       </label>
     </div>
   `;
@@ -246,22 +227,37 @@ function buildQuestionCard(q) {
   card.querySelector("textarea").addEventListener("input", e => { ans.catatan=e.target.value; });
   renderThumbs(card, q.no);
   card.querySelector('input[type="file"]').addEventListener("change", async e => {
-    const files = Array.from(e.target.files||[]);
-    if (!files.length) return;
-    for (const f of files) {
-      let dataUrl;
-      try { dataUrl = await compressImage(f); } catch(err) { console.error(err); continue; }
-      const photo = { dataUrl, filename: f.name, uploading: !STATE.trialMode };
-      ans.photos.push(photo);
-      renderThumbs(card, q.no);
-      if (!STATE.trialMode) {
-        Api.gasPost("uploadPhoto", { dataUrl, filename: f.name })
-          .then(res => { photo.url = res.url; photo.uploading = false; renderThumbs(card, q.no); })
-          .catch(() => { photo.uploading = false; renderThumbs(card, q.no); });
+  const files = Array.from(e.target.files||[]);
+  if (!files.length) return;
+
+  for (const f of files) {
+    // 1. Compress first
+    let dataUrl;
+    try {
+      dataUrl = await compressImage(f);
+    } catch(err) { console.error(err); continue; }
+
+    // 2. Add as "uploading" immediately so user sees it
+    const idx = ans.photos.length;
+    ans.photos.push({ dataUrl, filename: f.name, uploading: true, url: null });
+    renderThumbs(card, q.no);
+
+    // 3. Upload to Drive in background
+    try {
+      const res = await Api.gasPost("uploadPhoto", { dataUrl, filename: f.name });
+      if (res.success) {
+        ans.photos[idx].url = res.url;
+        ans.photos[idx].dataUrl = null; // free memory — URL saved in Drive
       }
+    } catch(err) {
+      console.error("Upload failed, keeping local:", err);
+    } finally {
+      ans.photos[idx].uploading = false;
+      renderThumbs(card, q.no);
     }
-    e.target.value="";
-  });
+  }
+  e.target.value = "";
+});
   return card;
 }
 
@@ -274,19 +270,24 @@ function syncGroup(card, group) {
 function renderThumbs(card, qNo) {
   const ans = STATE.answers[qNo];
   const wrap = card.querySelector(".photo-thumbs");
-  wrap.innerHTML = ans.photos.map((p,i) => {
-    const badge = p.uploading
-      ? `<div class="photo-upload-badge uploading">⏳</div>`
-      : p.url
-        ? `<div class="photo-upload-badge done" title="Dimuat naik">✓</div>`
-        : ``;
-    return `<div class="photo-thumb">
-      <img src="${p.dataUrl || p.url}" alt="Foto ${i+1}">${badge}
-      <button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>
-    </div>`;
-  }).join("");
+  wrap.innerHTML = ans.photos.map((p, i) => `
+    <div class="photo-thumb">
+      ${p.uploading
+        ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#eaf1f0;flex-direction:column;gap:2px;">
+             <div class="loading-spinner" style="width:22px;height:22px;border-width:3px;"></div>
+             <span style="font-size:9px;color:#5b6e6b;">Muat naik...</span>
+           </div>`
+        : `<img src="${p.dataUrl || p.url}" alt="Foto ${i+1}">
+           ${p.url ? '<div style="position:absolute;bottom:2px;right:2px;background:#1e8e5a;color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;">✓</div>' : ''}`
+      }
+      ${p.uploading ? '' : `<button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>`}
+    </div>`).join("");
+
   wrap.querySelectorAll(".photo-thumb__remove").forEach(btn =>
-    btn.addEventListener("click", () => { ans.photos.splice(Number(btn.dataset.idx),1); renderThumbs(card,qNo); }));
+    btn.addEventListener("click", () => {
+      ans.photos.splice(Number(btn.dataset.idx), 1);
+      renderThumbs(card, qNo);
+    }));
 }
 
 function compressImage(file, maxDim=1280, quality=0.72) {
@@ -393,23 +394,13 @@ function renderReviewStep(c) {
 
 /* ── Submit ───────────────────────────────────────────────────────── */
 async function submitAudit() {
-  if (STATE.trialMode) {
-    const marks = totalMarks();
-    const pct = TOTAL_QUESTIONS ? Math.round(marks/TOTAL_QUESTIONS*100) : 0;
-    STATE.result = { submissionId:"DEMO-"+Date.now(), totalMarks:marks, nonTBTotal:TOTAL_QUESTIONS, percentage:pct };
-    renderResultStep();
-    return;
-  }
   try {
     const result = await Loading.withLoading("Menghantar audit & memuat naik foto...", async () => {
       const payload = {
         auditType: STATE.auditType,
-        level: STATE.level,
         daerah: STATE.header.daerah,
         klinik: STATE.header.klinik,
         namaPPP: STATE.header.namaPPP,
-        tempatBertugas: STATE.header.tempatBertugas,
-        emelAuditor: STATE.header.emelAuditor,
         tarikhAudit: STATE.header.tarikhAudit,
         ringkasan: STATE.ringkasan,
         answers: Object.entries(STATE.answers).map(([qNo,a]) => ({
@@ -417,7 +408,7 @@ async function submitAudit() {
           penilaian: a.penilaian || "",
           tindakSusul: a.tindakSusul || "",
           catatan: a.catatan,
-          photos: (a.photos||[]).map(p => ({ url:p.url||null, dataUrl:p.dataUrl||null, filename:p.filename }))
+          photos: (a.photos||[]).map(p => ({ url: p.url,dataUrl:p.dataUrl, filename:p.filename }))
         }))
       };
       const res = await Api.gasPost("submitAudit", payload);
@@ -508,8 +499,7 @@ function renderResultStep() {
           totalMarks: r.totalMarks,
           nonTBTotal: TOTAL_QUESTIONS,
           percentage: r.percentage,
-          isReaudit: false,
-          isDemo: STATE.trialMode
+          isReaudit: false
         });
       });
     } catch(err) { toast("Gagal menjana PDF: "+err.message,"error"); }
