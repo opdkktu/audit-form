@@ -227,37 +227,22 @@ function buildQuestionCard(q) {
   card.querySelector("textarea").addEventListener("input", e => { ans.catatan=e.target.value; });
   renderThumbs(card, q.no);
   card.querySelector('input[type="file"]').addEventListener("change", async e => {
-  const files = Array.from(e.target.files||[]);
-  if (!files.length) return;
-
-  for (const f of files) {
-    // 1. Compress first
-    let dataUrl;
-    try {
-      dataUrl = await compressImage(f);
-    } catch(err) { console.error(err); continue; }
-
-    // 2. Add as "uploading" immediately so user sees it
-    const idx = ans.photos.length;
-    ans.photos.push({ dataUrl, filename: f.name, uploading: true, url: null });
-    renderThumbs(card, q.no);
-
-    // 3. Upload to Drive in background
-    try {
-      const res = await Api.gasPost("uploadPhoto", { dataUrl, filename: f.name });
-      if (res.success) {
-        ans.photos[idx].url = res.url;
-        ans.photos[idx].dataUrl = null; // free memory — URL saved in Drive
-      }
-    } catch(err) {
-      console.error("Upload failed, keeping local:", err);
-    } finally {
-      ans.photos[idx].uploading = false;
-      renderThumbs(card, q.no);
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    for (const f of files) {
+      let dataUrl;
+      try { dataUrl = await compressImage(f); }
+      catch (err) { console.error(err); continue; }
+      // keep dataUrl in memory: needed for the PDF and as a reliable preview
+      const photo = {
+        id: "p" + Date.now() + Math.random().toString(36).slice(2, 7),
+        dataUrl, filename: f.name, status: "uploading", url: null
+      };
+      ans.photos.push(photo);
+      refreshThumbs(q.no);
+      uploadPhotoInBackground(photo, q.no);   // not awaited on purpose
     }
-  }
-  e.target.value = "";
-});
+  });
   return card;
 }
 
@@ -267,26 +252,75 @@ function syncGroup(card, group) {
     btn.classList.toggle("is-selected", btn.dataset.val===val));
 }
 
+/* ── Background photo upload (queue: max 2 at a time, 1 auto-retry) ── */
+const UploadQueue = (() => {
+  const MAX = 2; let active = 0; const waiting = [];
+  function next() {
+    while (active < MAX && waiting.length) {
+      const { task, res, rej } = waiting.shift(); active++;
+      task().then(res, rej).finally(() => { active--; next(); });
+    }
+  }
+  return { run: task => new Promise((res, rej) => { waiting.push({ task, res, rej }); next(); }) };
+})();
+
+async function uploadPhotoInBackground(photo, qNo) {
+  photo.status = "uploading"; refreshThumbs(qNo);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await UploadQueue.run(() =>
+        Api.gasPost("uploadPhoto", { dataUrl: photo.dataUrl, filename: photo.filename }));
+      if (res && res.success && res.url) { photo.url = res.url; photo.status = "done"; break; }
+      throw new Error((res && res.error) || "Muat naik gagal");
+    } catch (err) {
+      console.error("Upload attempt " + attempt + " failed:", err);
+      photo.status = "failed";
+    }
+  }
+  refreshThumbs(qNo);
+}
+
+// look the card up again: it may have been re-created if the user changed step
+function refreshThumbs(qNo) {
+  const c = document.querySelector('.q-card[data-qno="' + qNo + '"]');
+  if (c) renderThumbs(c, qNo);
+}
+
+function hasPendingUploads() {
+  return Object.values(STATE.answers).some(a => (a.photos || []).some(p => p.status === "uploading"));
+}
+
 function renderThumbs(card, qNo) {
   const ans = STATE.answers[qNo];
   const wrap = card.querySelector(".photo-thumbs");
-  wrap.innerHTML = ans.photos.map((p, i) => `
-    <div class="photo-thumb">
-      ${p.uploading
-        ? `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#eaf1f0;flex-direction:column;gap:2px;">
-             <div class="loading-spinner" style="width:22px;height:22px;border-width:3px;"></div>
-             <span style="font-size:9px;color:#5b6e6b;">Muat naik...</span>
-           </div>`
-        : `<img src="${p.dataUrl || p.url}" alt="Foto ${i+1}">
-           ${p.url ? '<div style="position:absolute;bottom:2px;right:2px;background:#1e8e5a;color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;">✓</div>' : ''}`
-      }
-      ${p.uploading ? '' : `<button type="button" class="photo-thumb__remove" data-idx="${i}">×</button>`}
-    </div>`).join("");
+  if (!wrap) return;
+  wrap.innerHTML = ans.photos.map((p, i) => {
+    const src = p.dataUrl || Api.driveThumb(p.url, 200);
+    const overlay =
+      p.status === "uploading"
+        ? `<div style="position:absolute;inset:0;background:rgba(255,255,255,.65);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">
+             <div class="loading-spinner" style="width:20px;height:20px;border-width:3px;"></div>
+             <span style="font-size:9px;color:#34524e;">Muat naik...</span></div>`
+        : p.status === "failed"
+        ? `<button type="button" class="photo-thumb__retry" data-id="${p.id}"
+             style="position:absolute;inset:0;border:none;background:rgba(192,57,43,.78);color:#fff;font-size:10px;font-weight:700;cursor:pointer;">⟳<br>Cuba lagi</button>`
+        : `<div style="position:absolute;bottom:2px;right:2px;background:#1e8e5a;color:#fff;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:10px;">✓</div>`;
+    return `<div class="photo-thumb">
+      <img src="${src}" alt="Foto ${i + 1}">
+      ${overlay}
+      ${p.status === "uploading" ? "" : `<button type="button" class="photo-thumb__remove" data-id="${p.id}">×</button>`}
+    </div>`;
+  }).join("");
 
   wrap.querySelectorAll(".photo-thumb__remove").forEach(btn =>
     btn.addEventListener("click", () => {
-      ans.photos.splice(Number(btn.dataset.idx), 1);
+      ans.photos = ans.photos.filter(p => p.id !== btn.dataset.id);
       renderThumbs(card, qNo);
+    }));
+  wrap.querySelectorAll(".photo-thumb__retry").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const p = ans.photos.find(x => x.id === btn.dataset.id);
+      if (p) uploadPhotoInBackground(p, qNo);
     }));
 }
 
@@ -394,6 +428,7 @@ function renderReviewStep(c) {
 
 /* ── Submit ───────────────────────────────────────────────────────── */
 async function submitAudit() {
+  if (hasPendingUploads()) { toast("Sila tunggu — foto masih dimuat naik.", "error"); return; }
   try {
     const result = await Loading.withLoading("Menghantar audit & memuat naik foto...", async () => {
       const payload = {
@@ -408,7 +443,7 @@ async function submitAudit() {
           penilaian: a.penilaian || "",
           tindakSusul: a.tindakSusul || "",
           catatan: a.catatan,
-          photos: (a.photos||[]).map(p => ({ url: p.url,dataUrl:p.dataUrl, filename:p.filename }))
+          photos: (a.photos||[]).map(p => p.url ? { url: p.url, filename: p.filename } : { dataUrl: p.dataUrl, filename: p.filename })
         }))
       };
       const res = await Api.gasPost("submitAudit", payload);
