@@ -436,6 +436,8 @@ async function submitAudit() {
         daerah: STATE.header.daerah,
         klinik: STATE.header.klinik,
         namaPPP: STATE.header.namaPPP,
+        tempatBertugas: STATE.header.tempatBertugas,
+        emelAuditor: STATE.header.emelAuditor,
         tarikhAudit: STATE.header.tarikhAudit,
         ringkasan: STATE.ringkasan,
         answers: Object.entries(STATE.answers).map(([qNo,a]) => ({
@@ -451,6 +453,12 @@ async function submitAudit() {
       return res;
     });
     STATE.result = result;
+    // fire-and-forget: server builds the PDF and emails it (does not delay the result page)
+    if (STATE.header.emelAuditor && result.submissionId) {
+      Api.gasPost("emailAudit", { submissionId: result.submissionId })
+        .then(r => { if (r && r.success) toast("📎 PDF laporan dihantar ke emel anda.", "ok"); })
+        .catch(() => { /* will be retried by the pending-email job */ });
+    }
     renderResultStep();
   } catch(err) { toast("Gagal menghantar: "+err.message, "error"); }
 }
