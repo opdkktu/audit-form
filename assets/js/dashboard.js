@@ -239,15 +239,20 @@ function showDetail(submissionId) {
 
   const rowsHtml = rows.map(r => {
     const photos = r.photoURLs ? r.photoURLs.split(",").map(u => u.trim()).filter(Boolean) : [];
-    const photoHtml = photos.map(u =>
-      `<a href="${u}" target="_blank"><img src="${u}" style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;" onerror="this.style.display='none'"></a>`
-    ).join("");
+    const photoHtml = photos.map(u => {
+      const t1 = Api.driveThumb(u, 300), t2 = Api.driveAlt(u, 300);
+      return `<a href="${Api.escapeHtml(u)}" target="_blank" rel="noopener">
+        <img src="${t1}" referrerpolicy="no-referrer" loading="lazy" alt="Foto"
+          style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;"
+          onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${t2}';}else{this.outerHTML='<span style=&quot;font-size:11px;color:#0b4f5c;&quot;>📷 Buka</span>';}">
+      </a>`;
+    }).join("");
     const pColor = r.penilaian === "YA" ? "#1e8e5a" : r.penilaian === "TIDAK" ? "#c0392b" : "#888";
     return `<tr style="border-bottom:1px solid #f0f0f0;">
       <td style="padding:7px 6px;font-size:12px;color:#666;white-space:nowrap;">${r.section||""}-${r.qNo}</td>
       <td style="padding:7px 6px;font-weight:700;color:${pColor};font-size:13px;">${r.penilaian||"-"}</td>
-      <td style="padding:7px 6px;font-size:12px;color:#777;">${r.tindakSusul||"-"}</td>
-      <td style="padding:7px 6px;font-size:12px;max-width:180px;">${r.catatan||""}</td>
+      <td style="padding:7px 6px;font-size:12px;color:#777;">${Api.escapeHtml(r.tindakSusul||"-")}</td>
+      <td style="padding:7px 6px;font-size:12px;max-width:180px;">${Api.escapeHtml(r.catatan||"")}</td>
       <td style="padding:7px 6px;">${photoHtml}</td>
     </tr>`;
   }).join("");
