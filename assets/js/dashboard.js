@@ -230,8 +230,10 @@ async function fetchDetail(sub) {
     rows = res.data;
   } catch (e) { // fallback (old backend): rows without question text
     rows = RAW.details.filter(d => d.submissionId === sub.submissionId).map(d => ({ ...d, qNo: Number(d.qNo), text: "", sectionTitle: "" })).sort((a, b) => a.qNo - b.qNo);
+    rows._err = String(e.message || e);
   }
-  DETAIL_CACHE.set(sub.submissionId, rows); return rows;
+  if (!rows._err) DETAIL_CACHE.set(sub.submissionId, rows);
+  return rows;
 }
 function detailRowsHtml(rows) {
   if (!rows.length) return '<div class="empty-state">Tiada data soalan.</div>';
