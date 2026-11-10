@@ -1,4 +1,4 @@
-/* dashboard-ui.css — add AFTER style.css. Skeletons, motion, detail modal. */
+"/* dashboard-ui.css — add AFTER style.css. Skeletons, motion, detail modal. */
 @keyframes shimmer { to { background-position: -200% 0; } }
 @keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes popIn { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
@@ -15,7 +15,7 @@
 
 .chart-card { position: relative; }
 .chart-card.is-loading canvas { visibility: hidden; max-height: 200px; }
-.chart-card.is-loading::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: 16px; height: 190px; }
+.chart-card.is-loading::after { content: """"; position: absolute; left: 16px; right: 16px; bottom: 16px; height: 190px; }
 
 .kpi-card, .chart-card, .card { animation: riseIn .5s ease both; }
 .kpi-card:nth-child(2) { animation-delay: .06s; } .kpi-card:nth-child(3) { animation-delay: .12s; } .kpi-card:nth-child(4) { animation-delay: .18s; }
@@ -64,3 +64,18 @@
 .lb img { max-width: 100%; max-height: 92vh; border-radius: 10px; }
 
 @media (max-width: 520px) { .dq__meta, .dq__photos { margin-left: 0; } .dm { padding: 8px; } }
+
+/* ---- Column filters ---- */
+#audit-table thead tr:first-child th { white-space: nowrap; user-select: none; }
+#audit-table thead tr:first-child th:hover { color: var(--color-primary); }
+.col-filters th { padding: 4px 4px 8px !important; background: var(--color-surface); }
+.col-filters input, .col-filters select { width: 100%; min-width: 74px; padding: 6px 7px; font-size: 12px; border: 1.5px solid var(--color-border-strong); border-radius: 7px; background: var(--color-surface); font-family: inherit; text-transform: none; letter-spacing: 0; }
+.col-filters input:focus, .col-filters select:focus { border-color: var(--color-primary); outline: none; }
+.col-clear { border: 1.5px solid var(--color-border-strong); background: var(--color-surface); border-radius: 7px; width: 30px; height: 30px; color: var(--color-text-muted); }
+.col-clear:hover { background: var(--color-danger-tint); color: var(--color-danger); }
+
+/* photo chip + original-style anchored thumbnails */
+.photo-chip { background: var(--color-primary-tint); color: var(--color-primary-dark); font-weight: 700; font-size: 12px; padding: 3px 10px; border-radius: 99px; }
+.dq__photos a { display: inline-block; line-height: 0; }
+.dq__photos img { cursor: pointer; background: var(--color-surface-sunken); }
+.photo-open { font-size: 12px; color: var(--color-primary); font-weight: 600; padding: 6px 8px; background: var(--color-primary-tint); border-radius: 8px; line-height: 1.2; }"
