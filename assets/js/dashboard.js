@@ -1,4 +1,4 @@
-"/* dashboard.js v2 — skeleton loading, lazy animated charts, click-to-view detail with question text.
+/* dashboard.js v2 — skeleton loading, lazy animated charts, click-to-view detail with question text.
  * Needs backend Code_dashboard.gs v2 (lite + getAuditDetail); degrades gracefully on the old one. */
 (function () {
   window.Api = window.Api || {};
@@ -361,4 +361,4 @@ function renderJknAnalysis() {
       h += `<tr style=""border-bottom:1px solid var(--color-border);""><td style=""padding:7px 8px 7px 18px;"">${esc(r.klinik)}</td><td style=""padding:7px 8px;"">${esc(r.type)}</td><td style=""padding:7px 8px;text-align:center;font-weight:600;"">${r.da}%</td><td style=""padding:7px 8px;text-align:center;font-weight:600;"">${r.ja}%</td><td style=""padding:7px 8px;text-align:center;font-weight:700;color:${c};"">${r.diff > 0 ? ""+"" : """"}${r.diff}%</td></tr>`; });
   });
   cmp.innerHTML = h + ""</tbody></table></div>"";
-}"
+}
