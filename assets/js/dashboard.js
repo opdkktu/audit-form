@@ -122,6 +122,7 @@ function renderFailpointsChart(subs) {
     data: { labels: top.map(([k]) => lab(k)), datasets: [{ label: "Bilangan Tidak", data: top.map(([, n]) => n), backgroundColor: "#C0392B", borderRadius: 6 }] },
     options: { indexAxis: "y", animation: barAnim, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } } });
 }
+async function loadDetailsBackground() {}
 async function loadDetailsInBackground() {
   if (RAW.details && RAW.details.length) { DETAILS_STATE = "done"; drawChart("failpoints"); return; }
   DETAILS_STATE = "loading";
@@ -230,10 +231,8 @@ async function fetchDetail(sub) {
     rows = res.data;
   } catch (e) { // fallback (old backend): rows without question text
     rows = RAW.details.filter(d => d.submissionId === sub.submissionId).map(d => ({ ...d, qNo: Number(d.qNo), text: "", sectionTitle: "" })).sort((a, b) => a.qNo - b.qNo);
-    rows._err = String(e.message || e);
   }
-  if (!rows._err) DETAIL_CACHE.set(sub.submissionId, rows);
-  return rows;
+  DETAIL_CACHE.set(sub.submissionId, rows); return rows;
 }
 function detailRowsHtml(rows) {
   if (!rows.length) return '<div class="empty-state">Tiada data soalan.</div>';
