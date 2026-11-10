@@ -1,445 +1,301 @@
-/* ── Safety shim: works even if a stale/cached api.js is loaded ───── */
+/* dashboard.js v2 — skeleton loading, lazy animated charts, click-to-view detail with question text.
+ * Needs backend Code_dashboard.gs v2 (lite + getAuditDetail); degrades gracefully on the old one. */
 (function () {
   window.Api = window.Api || {};
-  if (typeof Api.driveId !== "function") Api.driveId = function (url) {
-    const m = String(url || "").match(/[?&]id=([\w-]+)/) || String(url || "").match(/\/d\/([\w-]+)/);
-    return m ? m[1] : null;
-  };
-  if (typeof Api.driveThumb !== "function") Api.driveThumb = function (url, size) {
-    const id = Api.driveId(url);
-    return id ? "https://drive.google.com/thumbnail?id=" + id + "&sz=w" + (size || 300) : (url || "");
-  };
-  if (typeof Api.driveAlt !== "function") Api.driveAlt = function (url, size) {
-    const id = Api.driveId(url);
-    return id ? "https://lh3.googleusercontent.com/d/" + id + "=w" + (size || 300) : (url || "");
-  };
-  if (typeof Api.escapeHtml !== "function") Api.escapeHtml = function (v) {
-    return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  };
+  const A = window.Api;
+  A.driveId = A.driveId || (u => { const m = String(u || "").match(/[?&]id=([\w-]+)/) || String(u || "").match(/\/d\/([\w-]+)/); return m ? m[1] : null; });
+  A.driveThumb = A.driveThumb || ((u, s) => { const i = A.driveId(u); return i ? "https://drive.google.com/thumbnail?id=" + i + "&sz=w" + (s || 300) : (u || ""); });
+  A.driveAlt = A.driveAlt || ((u, s) => { const i = A.driveId(u); return i ? "https://lh3.googleusercontent.com/d/" + i + "=w" + (s || 300) : (u || ""); });
+  A.escapeHtml = A.escapeHtml || (v => String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])));
+  if (typeof window.loadScript !== "function") window.loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
 })();
 
-/**
- * dashboard.js — Merged dashboard (Ambulans + Kecemasan + future forms)
- *
- * DATA SOURCES (via Code_dashboard.gs):
- *   RAW.submissions  — from Audits sheet, one entry per submitted audit
- *   RAW.details      — from AuditDetails sheet, one entry per question answer
- *   RAW.totalKK / totalKKByDaerah            — all KK count (MasterData col A+B)
- *   RAW.totalKKWithAmbulan / ByDaerah        — KK where MasterData col C = "ada"
- */
+let RAW = { submissions: [], details: [], totalKK: 0, totalKKByDaerah: {}, totalKKWithAmbulan: 0, totalKKWithAmbulanByDaerah: {} };
+let CHARTS = {}, ACTIVE_LEVEL = "daerah", LATEST = [], SESSION_PIN = "", TABLE_LIMIT = 25, DETAILS_STATE = "idle";
+const DETAIL_CACHE = new Map(), SEEN = new Set();
+const $ = id => document.getElementById(id);
+const esc = v => Api.escapeHtml(v);
+const REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const parseDmy = s => { const m = String(s || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(s); };
+const katColor = k => (KATEGORI_SCALE.find(t => t.label === k) || {}).color || "#888";
+const CHART_URL = "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js";
+let chartLib; const loadChartLib = () => chartLib || (chartLib = loadScript(CHART_URL));
+window.addEventListener("load", () => setTimeout(loadChartLib, 300)); // preload while user types PIN
 
-let RAW = {
-  submissions: [], details: [],
-  totalKK: 0, totalKKByDaerah: {},
-  totalKKWithAmbulan: 0, totalKKWithAmbulanByDaerah: {}
-};
-let CHARTS = {};
-
-/* ── PIN gate ─────────────────────────────────────────────────────── */
+/* ── PIN gate ───────────────────────────────────────────────────── */
 (function () {
   const digits = Array.from(document.querySelectorAll(".pin-digit"));
   digits.forEach((el, i) => {
-    el.addEventListener("input", () => {
-      el.value = el.value.replace(/\D/g, "").slice(0, 1);
-      if (el.value && digits[i + 1]) digits[i + 1].focus();
-    });
-    el.addEventListener("keydown", e => {
-      if (e.key === "Backspace" && !el.value && digits[i - 1]) digits[i - 1].focus();
-    });
+    el.addEventListener("input", () => { el.value = el.value.replace(/\D/g, "").slice(0, 1); if (el.value && digits[i + 1]) digits[i + 1].focus(); });
+    el.addEventListener("keydown", e => { if (e.key === "Backspace" && !el.value && digits[i - 1]) digits[i - 1].focus(); });
   });
-
-  document.getElementById("pin-form").addEventListener("submit", async e => {
+  $("pin-form").addEventListener("submit", async e => {
     e.preventDefault();
-    const pin = digits.map(d => d.value).join("");
-    const errEl = document.getElementById("pin-error");
+    const pin = digits.map(d => d.value).join(""), errEl = $("pin-error");
     errEl.style.display = "none";
     if (pin.length !== 4) { errEl.style.display = "block"; return; }
-
     try {
       await Loading.withLoading("Mengesahkan PIN...", async () => {
-        const res = await Api.gasPost("getDashboardData", { pin });
+        const res = await Api.gasPost("getDashboardData", { pin, lite: true });
         if (!res.success) throw new Error(res.error || "PIN_SALAH");
-        RAW = res.data;
+        RAW = res.data; SESSION_PIN = pin;
       });
-      document.getElementById("pin-gate").remove();
-      document.getElementById("dashboard-content").style.display = "block";
-      setupFilters();
-      await Loading.withLoading("Menjana graf...", async () => {
-        await loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js");
-        switchLevel("daerah");
-      });
+      $("pin-gate").remove();
+      $("dashboard-content").style.display = "block";
+      showSkeletons(); setupFilters(); initLazyCharts();
+      await loadChartLib();
+      switchLevel("daerah");
+      loadDetailsInBackground();
     } catch (err) {
-      errEl.textContent = err.message === "PIN_SALAH" ? "PIN salah. Sila cuba lagi." : "Ralat: " + err.message;
-      errEl.style.display = "block";
-      digits.forEach(d => d.value = "");
-      digits[0].focus();
+      const m = String(err.message);
+      errEl.textContent = m === "PIN_SALAH" ? "PIN salah. Sila cuba lagi." : m === "TERLALU_BANYAK_CUBAAN" ? "Terlalu banyak cubaan. Cuba lagi dalam 10 minit." : "Ralat: " + m;
+      errEl.style.display = "block"; digits.forEach(d => d.value = ""); digits[0].focus();
     }
   });
 })();
 
-/* ── Filters ──────────────────────────────────────────────────────── */
-function setupFilters() {
-  const daerahSel    = document.getElementById("filter-daerah");
-  const klinikSel    = document.getElementById("filter-klinik");
-  const auditTypeSel = document.getElementById("filter-audit-type");
-
-  const daerahList = [...new Set(RAW.submissions.map(s => s.daerah))].sort();
-  daerahSel.innerHTML = `<option value="">Semua Daerah</option>` +
-    daerahList.map(d => `<option value="${d}">${d}</option>`).join("");
-
-  function refreshKlinik() {
-    const pool = daerahSel.value
-      ? RAW.submissions.filter(s => s.daerah === daerahSel.value)
-      : RAW.submissions;
-    const list = [...new Set(pool.map(s => s.klinik))].sort();
-    klinikSel.innerHTML = `<option value="">Semua Klinik</option>` +
-      list.map(k => `<option value="${k}">${k}</option>`).join("");
-  }
-  refreshKlinik();
-
-  daerahSel.addEventListener("change",    () => { refreshKlinik(); renderAll(); });
-  klinikSel.addEventListener("change",    renderAll);
-  auditTypeSel.addEventListener("change", renderAll);
+/* ── Skeletons ──────────────────────────────────────────────────── */
+function showSkeletons() {
+  $("kpi-grid").innerHTML = '<div class="skel skel-kpi"></div>'.repeat(4);
+  $("audit-table").querySelector("tbody").innerHTML = Array(6).fill('<tr class="skel-row">' + '<td><div class="skel"></div></td>'.repeat(8) + '</tr>').join("");
 }
 
-function filteredSubmissions() {
-  const daerah    = document.getElementById("filter-daerah").value;
-  const klinik    = document.getElementById("filter-klinik").value;
-  const auditType = document.getElementById("filter-audit-type").value;
-  return RAW.submissions.filter(s =>
-    s.level !== "jkn" &&
-    (!daerah    || s.daerah    === daerah)    &&
-    (!klinik    || s.klinik    === klinik)    &&
-    (!auditType || s.auditType === auditType)
-  );
-}
-
-/* ── Render all ───────────────────────────────────────────────────── */
-function renderAll() {
-  const subs = filteredSubmissions();
-  renderProgress(subs);
-  renderKpis(subs);
-  renderDaerahChart(subs);
-  renderKategoriChart(subs);
-  renderTrendChart(subs);
-  renderFailpointsChart(subs);
-  renderTable(subs);
-}
-
-/* ── Progress bar ─────────────────────────────────────────────────── */
-function renderProgress(subs) {
-  const year      = new Date().getFullYear();
-  const auditType = document.getElementById("filter-audit-type").value;
-  const daerah    = document.getElementById("filter-progress-daerah").value;
-
-  document.getElementById("prog-year-label").textContent = year;
-
-  const yearSubs  = subs.filter(s => {
-    const parts = String(s.tarikhAudit).split("/");
-    return (parts.length === 3 && parts[2] === String(year)) ||
-           String(s.tarikhAudit).startsWith(String(year));
+/* ── Lazy, animated charts (draw when scrolled into view) ───────── */
+const CHART_DEFS = {
+  daerah: { canvas: "chart-daerah", fn: renderDaerahChart }, kategori: { canvas: "chart-kategori", fn: renderKategoriChart },
+  trend: { canvas: "chart-trend", fn: renderTrendChart }, failpoints: { canvas: "chart-failpoints", fn: renderFailpointsChart }
+};
+function initLazyCharts() {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    io.unobserve(e.target); SEEN.add(e.target.dataset.chart); drawChart(e.target.dataset.chart);
+  }), { rootMargin: "60px" });
+  Object.entries(CHART_DEFS).forEach(([k, d]) => {
+    const card = $(d.canvas).closest(".card"); card.dataset.chart = k; card.classList.add("is-loading"); io.observe(card);
   });
-  const filtered  = daerah ? yearSubs.filter(s => s.daerah === daerah) : yearSubs;
-  const auditedKK = new Set(filtered.map(s => s.klinik)).size;
+}
+function drawChart(k) {
+  if (!SEEN.has(k) || !window.Chart) return;
+  const card = $(CHART_DEFS[k].canvas).closest(".card");
+  if (k === "failpoints" && DETAILS_STATE !== "done") { card.classList.add("is-loading"); return; }
+  CHART_DEFS[k].fn(LATEST); card.classList.remove("is-loading");
+}
+const ANIM = REDUCED ? false : { duration: 900, easing: "easeOutQuart" };
+const barAnim = REDUCED ? false : { duration: 800, easing: "easeOutQuart", delay: c => (c.type === "data" && c.mode === "default" ? c.dataIndex * 70 : 0) };
+function destroyChart(k) { if (CHARTS[k]) { CHARTS[k].destroy(); delete CHARTS[k]; } }
 
-  let totalKK;
-  if (auditType === "ambulans") {
-    totalKK = daerah ? (RAW.totalKKWithAmbulanByDaerah[daerah] || 0) : RAW.totalKKWithAmbulan;
-  } else {
-    totalKK = daerah ? (RAW.totalKKByDaerah[daerah] || 0) : RAW.totalKK;
-  }
+function renderDaerahChart(subs) {
+  const by = {}; subs.forEach(s => (by[s.daerah] = by[s.daerah] || []).push(Number(s.percentage)));
+  const labels = Object.keys(by).sort(), data = labels.map(d => Math.round(by[d].reduce((a, b) => a + b, 0) / by[d].length));
+  destroyChart("daerah");
+  CHARTS.daerah = new Chart($("chart-daerah"), { type: "bar",
+    data: { labels, datasets: [{ label: "Purata %", data, backgroundColor: "#0B4F5C", borderRadius: 6 }] },
+    options: { animation: barAnim, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } } });
+}
+function renderKategoriChart(subs) {
+  const counts = {}; KATEGORI_SCALE.forEach(t => counts[t.label] = 0);
+  subs.forEach(s => { if (counts[s.kategori] !== undefined) counts[s.kategori]++; });
+  destroyChart("kategori");
+  CHARTS.kategori = new Chart($("chart-kategori"), { type: "doughnut",
+    data: { labels: KATEGORI_SCALE.map(t => t.label), datasets: [{ data: KATEGORI_SCALE.map(t => counts[t.label]), backgroundColor: KATEGORI_SCALE.map(t => t.color), borderWidth: 2, borderColor: "#fff" }] },
+    options: { cutout: "58%", animation: REDUCED ? false : { animateRotate: true, animateScale: true, duration: 1100, easing: "easeOutCubic" },
+      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } } } } });
+}
+function renderTrendChart(subs) {
+  const sorted = [...subs].sort((a, b) => parseDmy(a.tarikhAudit) - parseDmy(b.tarikhAudit)); // FIX: dd/mm/yyyy parsing
+  destroyChart("trend");
+  CHARTS.trend = new Chart($("chart-trend"), { type: "line",
+    data: { labels: sorted.map(s => s.tarikhAudit), datasets: [{ label: "% Markah", data: sorted.map(s => Number(s.percentage)), borderColor: "#F2A93B", backgroundColor: "#F2A93B33", fill: true, tension: 0.35, pointRadius: 3 }] },
+    options: { animations: REDUCED ? false : { y: { from: c => c.chart.scales.y.getPixelForValue(0), duration: 1100, easing: "easeOutQuart" } },
+      plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } } });
+}
+function renderFailpointsChart(subs) {
+  const ids = new Set(subs.map(s => s.submissionId)), counts = {};
+  RAW.details.forEach(d => { // FIX: key by type+question so ambulans Q5 and kecemasan Q5 are not merged
+    if (!ids.has(d.submissionId) || d.penilaian !== "TIDAK") return;
+    const k = d.auditType + "|" + d.qNo; counts[k] = (counts[k] || 0) + 1;
+  });
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const lab = k => { const [t, n] = k.split("|"); return (t === "ambulans" ? "Amb" : "Kec") + " S" + n; };
+  destroyChart("failpoints");
+  CHARTS.failpoints = new Chart($("chart-failpoints"), { type: "bar",
+    data: { labels: top.map(([k]) => lab(k)), datasets: [{ label: "Bilangan Tidak", data: top.map(([, n]) => n), backgroundColor: "#C0392B", borderRadius: 6 }] },
+    options: { indexAxis: "y", animation: barAnim, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } } });
+}
+async function loadDetailsInBackground() {
+  if (RAW.details && RAW.details.length) { DETAILS_STATE = "done"; drawChart("failpoints"); return; }
+  DETAILS_STATE = "loading";
+  try {
+    const res = await Api.gasPost("getDashboardData", { pin: SESSION_PIN });
+    if (!res.success) throw new Error(res.error);
+    RAW.details = res.data.details || [];
+  } catch (e) { console.warn("Butiran gagal dimuat:", e.message); }
+  DETAILS_STATE = "done"; drawChart("failpoints");
+}
 
-  const pct = totalKK ? Math.min(100, Math.round(auditedKK / totalKK * 100)) : 0;
-  document.getElementById("prog-label").textContent = `${auditedKK} / ${totalKK} Klinik Kesihatan`;
-  document.getElementById("prog-pct").textContent   = pct + "%";
-  setTimeout(() => { document.getElementById("prog-fill").style.width = pct + "%"; }, 100);
+/* ── Filters ────────────────────────────────────────────────────── */
+function setupFilters() {
+  const dSel = $("filter-daerah"), kSel = $("filter-klinik"), tSel = $("filter-audit-type");
+  const opts = (first, list) => `<option value="">${first}</option>` + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  dSel.innerHTML = opts("Semua Daerah", [...new Set(RAW.submissions.map(s => s.daerah))].sort());
+  const refreshKlinik = () => {
+    const pool = dSel.value ? RAW.submissions.filter(s => s.daerah === dSel.value) : RAW.submissions;
+    kSel.innerHTML = opts("Semua Klinik", [...new Set(pool.map(s => s.klinik))].sort());
+  };
+  refreshKlinik();
+  dSel.addEventListener("change", () => { refreshKlinik(); renderAll(); });
+  kSel.addEventListener("change", renderAll); tSel.addEventListener("change", renderAll);
+}
+function filteredSubmissions() {
+  const d = $("filter-daerah").value, k = $("filter-klinik").value, t = $("filter-audit-type").value;
+  return RAW.submissions.filter(s => (ACTIVE_LEVEL === "jkn") === (s.level === "jkn") && (!d || s.daerah === d) && (!k || s.klinik === k) && (!t || s.auditType === t));
+}
 
-  const sel = document.getElementById("filter-progress-daerah");
+function renderAll() {
+  LATEST = filteredSubmissions(); TABLE_LIMIT = 25;
+  renderProgress(LATEST); renderKpis(LATEST); renderTable(LATEST);
+  Object.keys(CHART_DEFS).forEach(drawChart);
+}
+
+/* ── Progress ───────────────────────────────────────────────────── */
+function renderProgress(subs) {
+  const year = new Date().getFullYear(), type = $("filter-audit-type").value, daerah = $("filter-progress-daerah").value;
+  $("prog-year-label").textContent = year;
+  const ys = subs.filter(s => parseDmy(s.tarikhAudit).getFullYear() === year);
+  const f = daerah ? ys.filter(s => s.daerah === daerah) : ys, audited = new Set(f.map(s => s.klinik)).size;
+  const total = type === "ambulans" ? (daerah ? RAW.totalKKWithAmbulanByDaerah[daerah] || 0 : RAW.totalKKWithAmbulan) : (daerah ? RAW.totalKKByDaerah[daerah] || 0 : RAW.totalKK);
+  const pct = total ? Math.min(100, Math.round(audited / total * 100)) : 0;
+  $("prog-label").textContent = `${audited} / ${total} Klinik Kesihatan`;
+  countUp($("prog-pct"), pct, "%");
+  setTimeout(() => { $("prog-fill").style.width = pct + "%"; }, 100);
+  const sel = $("filter-progress-daerah");
   if (sel.options.length === 1) {
-    Object.keys(RAW.totalKKByDaerah).sort().forEach(d => {
-      const opt = document.createElement("option");
-      opt.value = d; opt.textContent = d; sel.appendChild(opt);
-    });
+    Object.keys(RAW.totalKKByDaerah).sort().forEach(d => sel.add(new Option(d, d)));
     sel.addEventListener("change", () => renderProgress(filteredSubmissions()));
   }
 }
 
-/* ── KPIs ─────────────────────────────────────────────────────────── */
+/* ── KPIs with count-up ─────────────────────────────────────────── */
+function countUp(el, to, suffix) {
+  suffix = suffix || "";
+  if (REDUCED) { el.textContent = to + suffix; return; }
+  const t0 = performance.now(), dur = 900;
+  (function tick(t) { const p = Math.min(1, (t - t0) / dur); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))) + suffix; if (p < 1) requestAnimationFrame(tick); })(t0);
+}
 function renderKpis(subs) {
-  const avg = subs.length
-    ? Math.round(subs.reduce((s, r) => s + Number(r.percentage), 0) / subs.length) : 0;
-  const klinikCount    = new Set(subs.map(s => s.klinik)).size;
-  const kategoriCounts = {};
-  subs.forEach(s => { kategoriCounts[s.kategori] = (kategoriCounts[s.kategori] || 0) + 1; });
-  const topKat = Object.entries(kategoriCounts).sort((a, b) => b[1] - a[1])[0];
-
-  document.getElementById("kpi-grid").innerHTML = `
-    <div class="kpi-card"><div class="kpi-card__label">Jumlah Audit</div><div class="kpi-card__value">${subs.length}</div></div>
-    <div class="kpi-card"><div class="kpi-card__label">Purata Markah</div><div class="kpi-card__value">${avg}%</div></div>
-    <div class="kpi-card"><div class="kpi-card__label">Klinik Disemak</div><div class="kpi-card__value">${klinikCount}</div></div>
-    <div class="kpi-card"><div class="kpi-card__label">Kategori Terkerap</div><div class="kpi-card__value" style="font-size:13px;">${topKat ? topKat[0] : "-"}</div></div>
-  `;
-  renderSpectrum(document.getElementById("dashboard-spectrum"), avg);
+  const avg = subs.length ? Math.round(subs.reduce((s, r) => s + Number(r.percentage), 0) / subs.length) : 0;
+  const kc = {}; subs.forEach(s => kc[s.kategori] = (kc[s.kategori] || 0) + 1);
+  const top = Object.entries(kc).sort((a, b) => b[1] - a[1])[0];
+  const card = (l, id, extra) => `<div class="kpi-card"><div class="kpi-card__label">${l}</div><div class="kpi-card__value" id="${id}" ${extra || ""}></div></div>`;
+  $("kpi-grid").innerHTML = card("Jumlah Audit", "k1") + card("Purata Markah", "k2") + card("Klinik Disemak", "k3") + card("Kategori Terkerap", "k4", 'style="font-size:13px;"');
+  countUp($("k1"), subs.length); countUp($("k2"), avg, "%"); countUp($("k3"), new Set(subs.map(s => s.klinik)).size);
+  $("k4").textContent = top ? top[0] : "-";
+  renderSpectrum($("dashboard-spectrum"), avg);
 }
 
-/* ── Charts ───────────────────────────────────────────────────────── */
-function destroyChart(key) {
-  if (CHARTS[key]) { CHARTS[key].destroy(); delete CHARTS[key]; }
-}
-
-function renderDaerahChart(subs) {
-  const byDaerah = {};
-  subs.forEach(s => { byDaerah[s.daerah] = byDaerah[s.daerah] || []; byDaerah[s.daerah].push(Number(s.percentage)); });
-  const labels = Object.keys(byDaerah).sort();
-  const data   = labels.map(d => Math.round(byDaerah[d].reduce((a, b) => a + b, 0) / byDaerah[d].length));
-  destroyChart("daerah");
-  CHARTS.daerah = new Chart(document.getElementById("chart-daerah"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: "Purata %", data, backgroundColor: "#0B4F5C", borderRadius: 6 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
-  });
-}
-
-function renderKategoriChart(subs) {
-  const counts = {};
-  KATEGORI_SCALE.forEach(t => counts[t.label] = 0);
-  subs.forEach(s => { if (counts[s.kategori] !== undefined) counts[s.kategori]++; });
-  destroyChart("kategori");
-  CHARTS.kategori = new Chart(document.getElementById("chart-kategori"), {
-    type: "doughnut",
-    data: {
-      labels: KATEGORI_SCALE.map(t => t.label),
-      datasets: [{ data: KATEGORI_SCALE.map(t => counts[t.label]), backgroundColor: KATEGORI_SCALE.map(t => t.color) }]
-    },
-    options: { plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } } } }
-  });
-}
-
-function renderTrendChart(subs) {
-  const sorted = [...subs].sort((a, b) => new Date(a.tarikhAudit) - new Date(b.tarikhAudit));
-  destroyChart("trend");
-  CHARTS.trend = new Chart(document.getElementById("chart-trend"), {
-    type: "line",
-    data: {
-      labels: sorted.map(s => s.tarikhAudit),
-      datasets: [{ label: "% Markah", data: sorted.map(s => Number(s.percentage)), borderColor: "#F2A93B", backgroundColor: "#F2A93B33", fill: true, tension: 0.3 }]
-    },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100 } } }
-  });
-}
-
-function renderFailpointsChart(subs) {
-  const ids = new Set(subs.map(s => s.submissionId));
-  const counts = {};
-  RAW.details.forEach(d => {
-    if (!ids.has(d.submissionId) || d.penilaian !== "TIDAK") return;
-    counts[d.qNo] = (counts[d.qNo] || 0) + 1;
-  });
-  const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  destroyChart("failpoints");
-  CHARTS.failpoints = new Chart(document.getElementById("chart-failpoints"), {
-    type: "bar",
-    data: {
-      labels: top.map(([no]) => "Soalan " + no),
-      datasets: [{ label: "Bilangan Tidak", data: top.map(([, n]) => n), backgroundColor: "#C0392B", borderRadius: 6 }]
-    },
-    options: { indexAxis: "y", plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
-  });
-}
-
-/* ── Detail modal ─────────────────────────────────────────────────── */
-function showDetail(submissionId) {
-  const sub  = RAW.submissions.find(s => s.submissionId === submissionId);
-  const rows = RAW.details
-    .filter(d => d.submissionId === submissionId)
-    .sort((a, b) => Number(a.qNo) - Number(b.qNo));
-  if (!sub) return;
-  const existing = document.getElementById("detail-modal");
-  if (existing) existing.remove();
-
-  const rowsHtml = rows.map(r => {
-    const photos = r.photoURLs ? r.photoURLs.split(",").map(u => u.trim()).filter(Boolean) : [];
-    const photoHtml = photos.map(u => {
-      const t1 = Api.driveThumb(u, 300), t2 = Api.driveAlt(u, 300);
-      return `<a href="${Api.escapeHtml(u)}" target="_blank" rel="noopener">
-        <img src="${t1}" referrerpolicy="no-referrer" loading="lazy" alt="Foto"
-          style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #ddd;margin:2px;"
-          onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${t2}';}else{this.outerHTML='<span style=&quot;font-size:11px;color:#0b4f5c;&quot;>📷 Buka</span>';}">
-      </a>`;
-    }).join("");
-    const pColor = r.penilaian === "YA" ? "#1e8e5a" : r.penilaian === "TIDAK" ? "#c0392b" : "#888";
-    return `<tr style="border-bottom:1px solid #f0f0f0;">
-      <td style="padding:7px 6px;font-size:12px;color:#666;white-space:nowrap;">${r.section||""}-${r.qNo}</td>
-      <td style="padding:7px 6px;font-weight:700;color:${pColor};font-size:13px;">${r.penilaian||"-"}</td>
-      <td style="padding:7px 6px;font-size:12px;color:#777;">${Api.escapeHtml(r.tindakSusul||"-")}</td>
-      <td style="padding:7px 6px;font-size:12px;max-width:180px;">${Api.escapeHtml(r.catatan||"")}</td>
-      <td style="padding:7px 6px;">${photoHtml}</td>
-    </tr>`;
-  }).join("");
-
-  const modal = document.createElement("div");
-  modal.id = "detail-modal";
-  modal.style.cssText = "position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);overflow-y:auto;padding:20px;";
-  modal.innerHTML = `
-    <div style="background:#fff;border-radius:18px;max-width:780px;margin:0 auto;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.3);">
-      <div style="background:#0b4f5c;color:#fff;padding:18px 22px;display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-weight:700;font-size:16px;margin-bottom:3px;">${sub.klinik} · ${sub.daerah}</div>
-          <div style="font-size:12px;opacity:.75;">${sub.tarikhAudit} &nbsp;|&nbsp; ${sub.namaPPP} &nbsp;|&nbsp; ${sub.auditLabel||sub.auditType}</div>
-        </div>
-        <button onclick="document.getElementById('detail-modal').remove()"
-          style="background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex:none;margin-left:12px;">×</button>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 22px 4px;">
-        <span style="background:#e3eeec;border-radius:8px;padding:7px 13px;font-size:13px;">
-          Markah: <strong>${sub.totalMarks}/${sub.nonTBTotal} (${sub.percentage}%)</strong>
-        </span>
-        <span style="background:#e3eeec;border-radius:8px;padding:7px 13px;font-size:13px;">
-          Kategori: <strong>${sub.kategori}</strong>
-        </span>
-      </div>
-      <div style="overflow-x:auto;padding:10px 22px 22px;">
-        <table style="width:100%;border-collapse:collapse;font-family:inherit;">
-          <thead>
-            <tr style="border-bottom:2px solid #eee;">
-              <th style="text-align:left;padding:6px;font-size:11px;color:#999;">NO</th>
-              <th style="text-align:left;padding:6px;font-size:11px;color:#999;">PENILAIAN</th>
-              <th style="text-align:left;padding:6px;font-size:11px;color:#999;">TINDAK SUSUL</th>
-              <th style="text-align:left;padding:6px;font-size:11px;color:#999;">CATATAN</th>
-              <th style="text-align:left;padding:6px;font-size:11px;color:#999;">FOTO</th>
-            </tr>
-          </thead>
-          <tbody>${rowsHtml||'<tr><td colspan="5" style="text-align:center;padding:20px;color:#bbb;">Tiada data soalan</td></tr>'}</tbody>
-        </table>
-      </div>
-    </div>`;
-  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
-}
-
-/* ── Table ────────────────────────────────────────────────────────── */
+/* ── Audit table (whole row clickable) ──────────────────────────── */
 function renderTable(subs) {
-  const sorted = [...subs].sort((a, b) => new Date(b.tarikhAudit) - new Date(a.tarikhAudit));
-  document.querySelector("#audit-table tbody").innerHTML = sorted.map(s => `
-    <tr>
-      <td>${s.tarikhAudit||"-"}</td>
-      <td>${s.daerah||"-"}</td>
-      <td>${s.klinik||"-"}</td>
-      <td>${s.namaPPP||"-"}</td>
-      <td><span style="font-size:11px;background:var(--color-primary-tint);color:var(--color-primary-dark);padding:2px 8px;border-radius:99px;">${s.auditLabel||s.auditType||"-"}</span></td>
-      <td>${s.totalMarks||0}/${s.nonTBTotal||"-"} (${s.percentage||0}%)</td>
-      <td>${s.kategori||"-"}</td>
-      <td><button onclick="showDetail('${s.submissionId}')"
-        style="background:none;border:1.5px solid var(--color-border-strong);border-radius:6px;padding:4px 9px;cursor:pointer;font-size:13px;" title="Lihat butiran">🔍</button></td>
-    </tr>
-  `).join("") || `<tr><td colspan="8" class="empty-state">Tiada audit dijumpai.</td></tr>`;
+  const sorted = [...subs].sort((a, b) => parseDmy(b.tarikhAudit) - parseDmy(a.tarikhAudit)); // FIX: date sort
+  const shown = sorted.slice(0, TABLE_LIMIT), tb = $("audit-table").querySelector("tbody");
+  tb.innerHTML = shown.map(s => `<tr data-id="${esc(s.submissionId)}" tabindex="0" title="Klik untuk lihat butiran">
+    <td>${esc(s.tarikhAudit || "-")}</td><td>${esc(s.daerah || "-")}</td><td>${esc(s.klinik || "-")}</td><td>${esc(s.namaPPP || "-")}</td>
+    <td><span style="font-size:11px;background:var(--color-primary-tint);color:var(--color-primary-dark);padding:2px 8px;border-radius:99px;">${esc(s.auditLabel || s.auditType || "-")}</span></td>
+    <td>${s.totalMarks || 0}/${s.nonTBTotal || "-"} (${s.percentage || 0}%)</td>
+    <td><span class="kat-dot" style="background:${katColor(s.kategori)}"></span>${esc(s.kategori || "-")}</td><td>🔍</td></tr>`).join("")
+    || `<tr><td colspan="8" class="empty-state">Tiada audit dijumpai.</td></tr>`;
+  let more = $("more-btn"); if (more) more.remove();
+  if (sorted.length > shown.length) {
+    more = document.createElement("button"); more.id = "more-btn"; more.className = "btn btn-ghost more-btn";
+    more.textContent = `Papar lagi (${sorted.length - shown.length})`;
+    more.onclick = () => { TABLE_LIMIT += 25; renderTable(subs); };
+    $("audit-table").closest(".table-wrap").after(more);
+  }
 }
+document.addEventListener("click", e => { const tr = e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") { const tr = e.target.closest && e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); }
+  if (e.key === "Escape") { const lb = $("lightbox"); if (lb) lb.remove(); else { const m = $("detail-modal"); if (m) m.remove(); } }
+});
 
-/* ── Level tab switching ──────────────────────────────────────────── */
-let ACTIVE_LEVEL = "daerah";
+/* ── Detail modal: full-width question rows, fetched on demand ──── */
+const NILAI = { YA: ["Ya", "ya"], TIDAK: ["Tidak", "tidak"], TIDAK_BERKENAAN: ["T/B", "tb"] };
+const TINDAK = { PERLU: "Perlu", TIDAK_PERLU: "Tidak perlu", TIDAK_BERKENAAN: "T/B" };
 
+async function fetchDetail(sub) {
+  if (DETAIL_CACHE.has(sub.submissionId)) return DETAIL_CACHE.get(sub.submissionId);
+  let rows;
+  try {
+    const res = await Api.gasPost("getAuditDetail", { pin: SESSION_PIN, submissionId: sub.submissionId, auditType: sub.auditType });
+    if (!res.success) throw new Error(res.error);
+    rows = res.data;
+  } catch (e) { // fallback (old backend): rows without question text
+    rows = RAW.details.filter(d => d.submissionId === sub.submissionId).map(d => ({ ...d, qNo: Number(d.qNo), text: "", sectionTitle: "" })).sort((a, b) => a.qNo - b.qNo);
+  }
+  DETAIL_CACHE.set(sub.submissionId, rows); return rows;
+}
+function detailRowsHtml(rows) {
+  if (!rows.length) return '<div class="empty-state">Tiada data soalan.</div>';
+  let cur = "", h = "";
+  rows.forEach(r => {
+    if (r.section !== cur) { cur = r.section; h += `<div class="dq-sec"><span>${esc(r.section)}</span>${esc(r.sectionTitle || "Bahagian " + r.section)}</div>`; }
+    const [lbl, cls] = NILAI[r.penilaian] || ["-", "tb"];
+    const photos = String(r.photoURLs || "").split(",").map(u => u.trim()).filter(Boolean);
+    h += `<div class="dq dq--${cls}"><div class="dq__text"><span class="dq__no">${esc(r.section)}${r.qNo}</span><div>${esc(r.text || "Soalan " + r.qNo)}</div></div>
+      <div class="dq__meta"><span class="pill pill--${cls}">${lbl}</span>${r.tindakSusul ? `<span>Tindak susul: <b>${esc(TINDAK[r.tindakSusul] || r.tindakSusul)}</b></span>` : ""}${r.catatan ? `<div class="dq__note">${esc(r.catatan)}</div>` : ""}</div>
+      ${photos.length ? `<div class="dq__photos">${photos.map(u => `<img loading="lazy" referrerpolicy="no-referrer" alt="Foto" src="${esc(Api.driveThumb(u, 300))}" data-alt="${esc(Api.driveAlt(u, 300))}" data-full="${esc(Api.driveThumb(u, 1400))}">`).join("")}</div>` : ""}</div>`;
+  });
+  return h;
+}
+async function openDetail(id) {
+  const sub = RAW.submissions.find(s => s.submissionId === id); if (!sub) return;
+  const old = $("detail-modal"); if (old) old.remove();
+  const rg = [["Kelebihan", sub.kelebihan], ["Kekurangan", sub.kekurangan], ["Cadangan", sub.cadangan], ["Penambahbaikan", sub.penambahbaikan]].filter(x => x[1]);
+  const m = document.createElement("div"); m.className = "dm"; m.id = "detail-modal";
+  m.innerHTML = `<div class="dm__box"><div class="dm__head"><div><div class="dm__title">${esc(sub.klinik)} · ${esc(sub.daerah)}</div>
+    <div class="dm__sub">${esc(sub.tarikhAudit)} | ${esc(sub.namaPPP)} | ${esc(sub.auditLabel || sub.auditType)}</div></div><button class="dm__x" aria-label="Tutup">×</button></div>
+    <div class="dm__stats"><span class="dm__chip">Markah: <b>${sub.totalMarks}/${sub.nonTBTotal} (${sub.percentage}%)</b></span>
+    <span class="dm__chip"><span class="kat-dot" style="background:${katColor(sub.kategori)}"></span><b>${esc(sub.kategori)}</b></span></div>
+    <div class="dm__body">${rg.length ? `<details class="dm__sum"><summary>Ringkasan laporan audit</summary>${rg.map(([k, v]) => `<p><b>${k}:</b> ${esc(v)}</p>`).join("")}</details>` : ""}
+    <div id="dm-rows">${'<div class="dq-skel"><div class="skel" style="width:90%"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:30%;height:20px"></div></div>'.repeat(6)}</div></div></div>`;
+  m.addEventListener("click", e => {
+    if (e.target === m || e.target.closest(".dm__x")) m.remove();
+    const img = e.target.closest(".dq__photos img");
+    if (img) { const lb = document.createElement("div"); lb.className = "lb"; lb.id = "lightbox"; lb.innerHTML = `<img src="${img.dataset.full}" referrerpolicy="no-referrer" alt="Foto">`; lb.onclick = () => lb.remove(); document.body.appendChild(lb); }
+  });
+  m.addEventListener("error", e => { const t = e.target; if (t.tagName !== "IMG") return; if (!t.dataset.f) { t.dataset.f = 1; t.src = t.dataset.alt; } else t.replaceWith(Object.assign(document.createElement("span"), { textContent: "📷", title: "Foto tidak dapat dipapar" })); }, true);
+  document.body.appendChild(m);
+  const rows = await fetchDetail(sub), box = $("dm-rows");
+  if (box && document.body.contains(m)) box.innerHTML = detailRowsHtml(rows);
+}
+window.showDetail = openDetail; // backward compat
+
+/* ── Level tabs + JKN comparison ────────────────────────────────── */
 function switchLevel(level) {
   ACTIVE_LEVEL = level;
-  document.getElementById("tab-daerah").classList.toggle("is-active", level === "daerah");
-  document.getElementById("tab-jkn").classList.toggle("is-active", level === "jkn");
-  document.getElementById("progress-section").style.display = level === "daerah" ? "" : "none";
-  document.getElementById("jkn-section").style.display = level === "jkn" ? "" : "none";
-
-  const mainSections = ["kpi-grid","dashboard-spectrum",".filter-row","#chart-daerah","#chart-kategori","#chart-trend","#chart-failpoints"].map(s=>document.querySelector(s)?.closest?.(".card")||document.querySelector(s));
-
-  // Show/hide charts and table for daerah mode
-  document.querySelectorAll(".chart-card").forEach(el => el.style.display = level === "daerah" ? "" : "none");
-  // kpi-grid and spectrum shown always
-  if (level === "jkn") {
-    renderJknAnalysis();
-  } else {
-    renderAll();
-  }
+  $("tab-daerah").classList.toggle("is-active", level === "daerah");
+  $("tab-jkn").classList.toggle("is-active", level === "jkn");
+  $("progress-section").style.display = level === "daerah" ? "" : "none";
+  $("jkn-section").style.display = level === "jkn" ? "" : "none";
+  renderAll();
+  if (level === "jkn") renderJknAnalysis();
 }
-
-/* ── JKN Analysis ─────────────────────────────────────────────────── */
 function renderJknAnalysis() {
-  const jknSubs    = RAW.submissions.filter(s => s.level === "jkn");
-  const daerahSubs = RAW.submissions.filter(s => s.level !== "jkn");
-
-  // KPI for JKN
-  renderKpis(jknSubs);
-
-  // Summary: count per form type
-  const byCat = {};
-  jknSubs.forEach(s => { byCat[s.auditLabel] = (byCat[s.auditLabel]||0)+1; });
-  const sumHtml = Object.entries(byCat).map(([label, n]) =>
-    `<div style="display:inline-flex;align-items:center;gap:8px;background:var(--color-primary-tint);border-radius:8px;padding:8px 14px;margin:4px 4px 4px 0;font-size:13px;">
-       <span style="font-weight:700;font-size:18px;">${n}</span> ${label}
-     </div>`
-  ).join("") || `<p style="color:var(--color-text-faint);font-size:13px;">Belum ada audit JKN.</p>`;
-  document.getElementById("jkn-summary").innerHTML = sumHtml;
-
-  // Comparison table
-  const compDiv = document.getElementById("jkn-comparison");
-  if (!jknSubs.length || !daerahSubs.length) {
-    compDiv.innerHTML = `<p style="color:var(--color-text-faint);font-size:13px;padding:12px 0;">Data tidak mencukupi untuk perbandingan. Perlukan audit daerah DAN JKN untuk KK yang sama.</p>`;
-    return;
-  }
-
-  // Build lookup: klinik+type → { daerah: avg%, jkn: avg% }
-  function avgByKey(subs) {
-    const map = {};
-    subs.forEach(s => {
-      const key = s.klinik + "|||" + s.auditType;
-      if (!map[key]) map[key] = { daerah:s.daerah, klinik:s.klinik, type:s.auditLabel, scores:[] };
-      map[key].scores.push(Number(s.percentage));
-    });
-    return map;
-  }
-  const daerahMap = avgByKey(daerahSubs);
-  const jknMap    = avgByKey(jknSubs);
-
-  // Find common KK+type pairs
-  const rows = [];
-  Object.keys(jknMap).forEach(key => {
-    if (!daerahMap[key]) return;
-    const d = daerahMap[key];
-    const j = jknMap[key];
-    const dAvg = Math.round(d.scores.reduce((a,b)=>a+b,0)/d.scores.length);
-    const jAvg = Math.round(j.scores.reduce((a,b)=>a+b,0)/j.scores.length);
-    rows.push({ daerah:d.daerah, klinik:d.klinik, type:d.type, daerahAvg:dAvg, jknAvg:jAvg, diff:jAvg-dAvg });
+  const jkn = RAW.submissions.filter(s => s.level === "jkn"), dae = RAW.submissions.filter(s => s.level !== "jkn");
+  const by = {}; jkn.forEach(s => by[s.auditLabel] = (by[s.auditLabel] || 0) + 1);
+  $("jkn-summary").innerHTML = Object.entries(by).map(([l, n]) => `<div style="display:inline-flex;align-items:center;gap:8px;background:var(--color-primary-tint);border-radius:8px;padding:8px 14px;margin:4px 4px 4px 0;font-size:13px;"><span style="font-weight:700;font-size:18px;">${n}</span> ${esc(l)}</div>`).join("")
+    || '<p style="color:var(--color-text-faint);font-size:13px;">Belum ada audit JKN.</p>';
+  const cmp = $("jkn-comparison"), note = t => cmp.innerHTML = `<p style="color:var(--color-text-faint);font-size:13px;padding:12px 0;">${t}</p>`;
+  if (!jkn.length || !dae.length) return note("Data tidak mencukupi untuk perbandingan. Perlukan audit daerah DAN JKN untuk KK yang sama.");
+  const avgMap = subs => { const m = {}; subs.forEach(s => { const k = s.klinik + "|" + s.auditType; (m[k] = m[k] || { daerah: s.daerah, klinik: s.klinik, type: s.auditLabel, sc: [] }).sc.push(Number(s.percentage)); }); return m; };
+  const avg = a => Math.round(a.reduce((x, y) => x + y, 0) / a.length), dm = avgMap(dae), jm = avgMap(jkn), g = {};
+  Object.keys(jm).forEach(k => { if (!dm[k]) return; const d = dm[k], j = jm[k], da = avg(d.sc), ja = avg(j.sc); (g[d.daerah] = g[d.daerah] || []).push({ klinik: d.klinik, type: d.type, da, ja, diff: ja - da }); });
+  if (!Object.keys(g).length) return note("Tiada KK yang sama diaudit oleh kedua-dua peringkat daerah dan JKN.");
+  const th = t => `<th style="text-align:${t[1]};padding:7px 8px;color:var(--color-text-faint);font-size:11px;">${t[0]}</th>`;
+  let h = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--color-border);">${[["DAERAH / KLINIK", "left"], ["JENIS AUDIT", "left"], ["MARKAH DAERAH", "center"], ["MARKAH JKN", "center"], ["BEZA", "center"]].map(th).join("")}</tr></thead><tbody>`;
+  Object.keys(g).sort().forEach(d => {
+    h += `<tr><td colspan="5" style="padding:9px 8px 4px;font-weight:700;color:var(--color-primary-dark);font-size:12px;text-transform:uppercase;">${esc(d)}</td></tr>`;
+    g[d].forEach(r => { const c = r.diff > 0 ? "#1e8e5a" : r.diff < 0 ? "#c0392b" : "#888";
+      h += `<tr style="border-bottom:1px solid var(--color-border);"><td style="padding:7px 8px 7px 18px;">${esc(r.klinik)}</td><td style="padding:7px 8px;">${esc(r.type)}</td><td style="padding:7px 8px;text-align:center;font-weight:600;">${r.da}%</td><td style="padding:7px 8px;text-align:center;font-weight:600;">${r.ja}%</td><td style="padding:7px 8px;text-align:center;font-weight:700;color:${c};">${r.diff > 0 ? "+" : ""}${r.diff}%</td></tr>`; });
   });
-
-  if (!rows.length) {
-    compDiv.innerHTML = `<p style="color:var(--color-text-faint);font-size:13px;padding:12px 0;">Tiada KK yang sama diaudit oleh kedua-dua peringkat daerah dan JKN.</p>`;
-    return;
-  }
-
-  // Group by daerah
-  const grouped = {};
-  rows.forEach(r => { (grouped[r.daerah] = grouped[r.daerah]||[]).push(r); });
-
-  let html = `<div style="overflow-x:auto;">
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="border-bottom:2px solid var(--color-border);">
-        <th style="text-align:left;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">DAERAH / KLINIK</th>
-        <th style="text-align:left;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">JENIS AUDIT</th>
-        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">MARKAH DAERAH</th>
-        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">MARKAH JKN</th>
-        <th style="text-align:center;padding:7px 8px;color:var(--color-text-faint);font-size:11px;">BEZA</th>
-      </tr></thead><tbody>`;
-
-  Object.keys(grouped).sort().forEach(d => {
-    html += `<tr><td colspan="5" style="padding:9px 8px 4px;font-weight:700;color:var(--color-primary-dark);font-size:12px;letter-spacing:.04em;text-transform:uppercase;">${d}</td></tr>`;
-    grouped[d].forEach(r => {
-      const diffColor = r.diff > 0 ? "#1e8e5a" : r.diff < 0 ? "#c0392b" : "#888";
-      const diffText  = (r.diff > 0 ? "+" : "") + r.diff + "%";
-      html += `<tr style="border-bottom:1px solid var(--color-border);">
-        <td style="padding:7px 8px;padding-left:18px;">${r.klinik}</td>
-        <td style="padding:7px 8px;"><span style="font-size:11px;background:var(--color-primary-tint);color:var(--color-primary-dark);padding:2px 8px;border-radius:99px;">${r.type}</span></td>
-        <td style="padding:7px 8px;text-align:center;font-weight:600;">${r.daerahAvg}%</td>
-        <td style="padding:7px 8px;text-align:center;font-weight:600;">${r.jknAvg}%</td>
-        <td style="padding:7px 8px;text-align:center;font-weight:700;color:${diffColor};">${diffText}</td>
-      </tr>`;
-    });
-  });
-
-  html += `</tbody></table></div>`;
-  compDiv.innerHTML = html;
+  cmp.innerHTML = h + "</tbody></table></div>";
 }
