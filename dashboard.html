@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
-<link rel="stylesheet" href="assets/css/dashboard-ui.css?v=3">
+<link rel="stylesheet" href="assets/css/dashboard-ui.css?v=4">
 <style>
 @keyframes progshimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
 .level-tab{padding:9px 18px;border-radius:99px;border:1.5px solid var(--color-border-strong);background:var(--color-surface);font-size:13px;font-weight:600;cursor:pointer;color:var(--color-text-muted);transition:all .2s;}
@@ -128,7 +128,13 @@
 
   <!-- Table -->
   <div class="card">
-    <h3 style="margin-bottom:10px;">Senarai Audit</h3>
+    <div class="table-toolbar">
+      <h3>Senarai Audit</h3>
+      <div class="table-toolbar__r">
+        <span id="tf-count" class="tf-count" aria-live="polite"></span>
+        <button type="button" id="tf-clear" class="btn btn-ghost tf-clear" hidden>✕ Kosongkan penapis</button>
+      </div>
+    </div>
     <div class="table-wrap">
       <table class="data-table" id="audit-table">
         <thead>
@@ -140,6 +146,16 @@
             <th>Jenis Audit</th>
             <th>Markah</th>
             <th>Kategori</th>
+            <th></th>
+          </tr>
+          <tr class="tf-row">
+            <th><select id="tf-tarikh" aria-label="Tapis mengikut bulan"><option value="">Semua</option></select></th>
+            <th><select id="tf-daerah" aria-label="Tapis mengikut daerah"><option value="">Semua</option></select></th>
+            <th><select id="tf-klinik" aria-label="Tapis mengikut klinik"><option value="">Semua</option></select></th>
+            <th><input id="tf-ppp" type="search" placeholder="Cari nama…" aria-label="Cari nama PPP" autocomplete="off"></th>
+            <th><select id="tf-type" aria-label="Tapis mengikut jenis audit"><option value="">Semua</option></select></th>
+            <th><div class="tf-range"><input id="tf-min" type="number" inputmode="numeric" min="0" max="100" placeholder="Min %" aria-label="Markah minimum (%)"><input id="tf-max" type="number" inputmode="numeric" min="0" max="100" placeholder="Maks %" aria-label="Markah maksimum (%)"></div></th>
+            <th><select id="tf-kat" aria-label="Tapis mengikut kategori"><option value="">Semua</option></select></th>
             <th></th>
           </tr>
         </thead>
@@ -158,6 +174,6 @@
   window.APP_CONFIG.SHARED_TOKEN = window.APP_CONFIG.DASHBOARD_TOKEN;
 </script>
 <script src="assets/js/api.js"></script>
-<script src="assets/js/dashboard.js?v=3"></script>
+<script src="assets/js/dashboard.js?v=4"></script>
 </body>
 </html>
