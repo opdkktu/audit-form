@@ -42,7 +42,7 @@ const AUDIT_SECTIONS = [
   },
   {
     code: "C",
-    title: "KAWALAN INFKESI",
+    title: "KAWALAN INFEKSI",
     questions: [
       { no: 20, text: "Kawasan bilik rawatan dalam keadaan  bersih" },
       { no: 21, text: "PPE mencukupi" },
