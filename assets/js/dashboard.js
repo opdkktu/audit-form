@@ -235,19 +235,18 @@ function renderKpis(subs) {
 }
 
 /* ── Audit table: a filter for EVERY column + whole-row click ───── */
-const TF = { tarikh: "", daerah: "", klinik: "", ppp: "", type: "", min: "", max: "", kat: "" };
-const TF_SELECTS = { tarikh: "tf-tarikh", daerah: "tf-daerah", klinik: "tf-klinik", type: "tf-type", kat: "tf-kat" };
+const TF = { from: "", to: "", daerah: "", klinik: "", ppp: "", type: "", min: "", max: "", kat: "" };
+const TF_SELECTS = { daerah: "tf-daerah", klinik: "tf-klinik", type: "tf-type", kat: "tf-kat" };
 const TF_TYPED = { ppp: "tf-ppp", min: "tf-min", max: "tf-max" };
-const MONTHS = ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ogo", "Sep", "Okt", "Nov", "Dis"];
-const monthKey = s => { const d = parseDmy(s.tarikhAudit); return isNaN(d) ? "" : String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); };
-const monthLabel = k => { const [m, y] = k.split("/"); return MONTHS[+m - 1] + " " + y; };
+const dayKey = d => d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+const inRange = s => { if (!TF.from) return true; const d = parseDmy(s.tarikhAudit); if (isNaN(d)) return false; const k = dayKey(d); return k >= TF.from && k <= TF.to; };
 const normTxt = v => String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 function applyTableFilters(subs) {
   const q = normTxt(TF.ppp).trim(), min = TF.min === "" ? null : +TF.min, max = TF.max === "" ? null : +TF.max;
   return subs.filter(s => {
     const pct = Number(s.percentage) || 0;
-    return (!TF.tarikh || monthKey(s) === TF.tarikh) && (!TF.daerah || s.daerah === TF.daerah) && (!TF.klinik || s.klinik === TF.klinik)
+    return inRange(s) && (!TF.daerah || s.daerah === TF.daerah) && (!TF.klinik || s.klinik === TF.klinik)
       && (!q || normTxt(s.namaPPP).includes(q)) && (!TF.type || (s.auditLabel || s.auditType) === TF.type)
       && (min === null || pct >= min) && (max === null || pct <= max) && (!TF.kat || s.kategori === TF.kat);
   });
@@ -256,7 +255,6 @@ function applyTableFilters(subs) {
 function refreshTableFilterOptions(subs) {
   const uniq = f => [...new Set(subs.map(f).filter(Boolean))];
   const lists = {
-    tarikh: uniq(monthKey).sort((a, b) => { const [am, ay] = a.split("/"), [bm, by] = b.split("/"); return (by - ay) || (bm - am); }).map(k => [k, monthLabel(k)]),
     daerah: uniq(s => s.daerah).sort().map(v => [v, v]),
     klinik: uniq(s => s.klinik).sort().map(v => [v, v]),
     type: uniq(s => s.auditLabel || s.auditType).sort().map(v => [v, v]),
@@ -273,6 +271,7 @@ function wireTableFilters() {
   const onChange = () => { TABLE_LIMIT = 25; renderTable(LATEST, true); };
   Object.entries(TF_SELECTS).forEach(([key, id]) => $(id).addEventListener("change", e => { TF[key] = e.target.value; onChange(); }));
   let t; Object.entries(TF_TYPED).forEach(([key, id]) => $(id).addEventListener("input", e => { TF[key] = e.target.value; clearTimeout(t); t = setTimeout(onChange, 150); }));
+  $("tf-tarikh").addEventListener("click", e => { e.stopPropagation(); openDatePicker(); });
   $("tf-clear").addEventListener("click", () => {
     Object.keys(TF).forEach(k => TF[k] = "");
     Object.values(TF_TYPED).forEach(id => $(id).value = "");
@@ -286,6 +285,7 @@ function renderTable(subs, keepOptions) {
   const sorted = [...filtered].sort((a, b) => parseDmy(b.tarikhAudit) - parseDmy(a.tarikhAudit));
   const shown = sorted.slice(0, TABLE_LIMIT), tb = $("audit-table").querySelector("tbody");
   const active = Object.values(TF).some(Boolean);
+  updateDateLabel();
   $("tf-clear").hidden = !active;
   $("tf-count").textContent = active ? `${filtered.length} daripada ${subs.length} audit` : `${subs.length} audit`;
   Object.entries(TF_SELECTS).forEach(([k, id]) => $(id).classList.toggle("is-set", !!TF[k]));
@@ -307,8 +307,83 @@ function renderTable(subs, keepOptions) {
 document.addEventListener("click", e => { const tr = e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); });
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") { const tr = e.target.closest && e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); }
-  if (e.key === "Escape") { const lb = $("lightbox"); if (lb) lb.remove(); else closeDetail(); }
+  if (e.key === "Escape") { const lb = $("lightbox"); if (lb) lb.remove(); else if ($("date-picker")) closeDatePicker(); else closeDetail(); }
 });
+
+/* ── Date-range calendar (click start, click end; days in between are highlighted) ── */
+const MONTHS_FULL = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
+const keyToDate = k => new Date(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100);
+const fmtKey = k => String(k % 100).padStart(2, "0") + "/" + String(Math.floor(k / 100) % 100).padStart(2, "0") + "/" + Math.floor(k / 10000);
+let DP = null;
+function updateDateLabel() {
+  const b = $("tf-tarikh"); if (!b) return;
+  b.textContent = !TF.from ? "Semua tarikh" : TF.from === TF.to ? fmtKey(TF.from) : fmtKey(TF.from) + " – " + fmtKey(TF.to);
+  b.classList.toggle("is-set", !!TF.from);
+}
+function closeDatePicker() { const el = $("date-picker"); if (el) el.remove(); const bd = $("dp-backdrop"); if (bd) bd.remove(); DP = null; }
+function openDatePicker() {
+  if (DP) return closeDatePicker();
+  const base = TF.from ? keyToDate(TF.from) : new Date();
+  const auditDays = new Set(LATEST.map(s => { const d = parseDmy(s.tarikhAudit); return isNaN(d) ? 0 : dayKey(d); }));
+  DP = { from: TF.from || 0, to: TF.to || 0, hover: 0, y: base.getFullYear(), m: base.getMonth(), auditDays };
+  const bd = document.createElement("div"); bd.id = "dp-backdrop"; bd.className = "dp-backdrop"; bd.onclick = closeDatePicker;
+  const el = document.createElement("div"); el.id = "date-picker"; el.className = "dp"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Pilih julat tarikh");
+  el.addEventListener("click", dpClick); el.addEventListener("mouseover", dpHover);
+  document.body.append(bd, el); drawDatePicker(); placeDatePicker();
+}
+function placeDatePicker() {
+  const el = $("date-picker"), r = $("tf-tarikh").getBoundingClientRect();
+  if (innerWidth < 640) { el.classList.add("dp--sheet"); el.style.left = el.style.top = ""; return; }
+  el.classList.remove("dp--sheet");
+  el.style.left = Math.max(8, Math.min(r.left, innerWidth - el.offsetWidth - 8)) + "px";
+  el.style.top = Math.max(8, Math.min(r.bottom + 6, innerHeight - el.offsetHeight - 8)) + "px";
+}
+function dpRangeNow() { // [lo, hi] shown now (includes hover preview while only the start is chosen)
+  if (DP.from && DP.to) return [DP.from, DP.to];
+  if (DP.from && DP.hover) return [Math.min(DP.from, DP.hover), Math.max(DP.from, DP.hover)];
+  return [DP.from, DP.from];
+}
+function drawDatePicker() {
+  const el = $("date-picker"), { y, m } = DP, [lo, hi] = dpRangeNow();
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate(), today = dayKey(new Date());
+  let cells = "<span></span>".repeat(lead);
+  for (let d = 1; d <= days; d++) {
+    const k = y * 10000 + (m + 1) * 100 + d;
+    const cls = ["dp__d", k === today ? "is-today" : "", DP.auditDays.has(k) ? "has-audit" : "", DP.from && k > lo && k < hi ? "in-range" : "", DP.from && k === lo ? "is-start" : "", DP.from && k === hi ? "is-end" : ""].filter(Boolean).join(" ");
+    cells += `<button type="button" class="${cls}" data-k="${k}" aria-label="${d} ${MONTHS_FULL[m]} ${y}">${d}</button>`;
+  }
+  const sel = DP.from ? (DP.to && DP.to !== DP.from ? fmtKey(DP.from) + " – " + fmtKey(DP.to) : fmtKey(DP.from) + (DP.to ? "" : " → pilih tarikh akhir")) : "Pilih tarikh mula";
+  el.innerHTML = `<div class="dp__head"><button type="button" class="dp__nav" data-nav="-1" aria-label="Bulan sebelum">‹</button>
+    <div class="dp__title">${MONTHS_FULL[m]} ${y}</div><button type="button" class="dp__nav" data-nav="1" aria-label="Bulan seterusnya">›</button></div>
+    <div class="dp__presets"><button type="button" data-p="month">Bulan ini</button><button type="button" data-p="last">Bulan lepas</button><button type="button" data-p="30">30 hari</button><button type="button" data-p="year">Tahun ini</button></div>
+    <div class="dp__dow">${["Isn", "Sel", "Rab", "Kha", "Jum", "Sab", "Ahd"].map(x => `<span>${x}</span>`).join("")}</div>
+    <div class="dp__grid">${cells}</div>
+    <div class="dp__legend"><i></i> ada audit</div>
+    <div class="dp__foot"><span class="dp__sel">${sel}</span><button type="button" class="btn btn-ghost" data-act="clear">Kosongkan</button><button type="button" class="btn btn-primary" data-act="apply" ${DP.from ? "" : "disabled"}>Guna</button></div>`;
+}
+function dpHover(e) {
+  const b = e.target.closest(".dp__d"); if (!b || !DP.from || DP.to) return;
+  const k = +b.dataset.k; if (k === DP.hover) return;
+  DP.hover = k; const [lo, hi] = dpRangeNow();
+  $("date-picker").querySelectorAll(".dp__d").forEach(x => { const v = +x.dataset.k; x.classList.toggle("in-range", v > lo && v < hi); x.classList.toggle("is-start", v === lo); x.classList.toggle("is-end", v === hi); });
+}
+function dpApply(from, to) { TF.from = from || ""; TF.to = from ? (to || from) : ""; closeDatePicker(); TABLE_LIMIT = 25; renderTable(LATEST, true); }
+function dpClick(e) {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.nav) { DP.m += +t.dataset.nav; if (DP.m < 0) { DP.m = 11; DP.y--; } if (DP.m > 11) { DP.m = 0; DP.y++; } return drawDatePicker(); }
+  if (t.dataset.k) {
+    const k = +t.dataset.k;
+    if (!DP.from || DP.to) { DP.from = k; DP.to = 0; DP.hover = 0; } else if (k < DP.from) { DP.from = k; } else { DP.to = k; }
+    return drawDatePicker();
+  }
+  if (t.dataset.p) {
+    const n = new Date(), y = n.getFullYear(), m = n.getMonth();
+    const r = { month: [new Date(y, m, 1), new Date(y, m + 1, 0)], last: [new Date(y, m - 1, 1), new Date(y, m, 0)], 30: [new Date(y, m, n.getDate() - 29), n], year: [new Date(y, 0, 1), new Date(y, 11, 31)] }[t.dataset.p];
+    return dpApply(dayKey(r[0]), dayKey(r[1]));
+  }
+  if (t.dataset.act === "clear") return dpApply(0, 0);
+  if (t.dataset.act === "apply" && DP.from) return dpApply(DP.from, DP.to || DP.from);
+}
 
 /* ── Detail modal ───────────────────────────────────────────────── */
 const NILAI = { YA: ["Ya", "ya"], TIDAK: ["Tidak", "tidak"], TIDAK_BERKENAAN: ["T/B", "tb"] };
