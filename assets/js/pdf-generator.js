@@ -22,7 +22,7 @@ function hexToRgb(hex) {
   return [parseInt(m.slice(0,2),16), parseInt(m.slice(2,4),16), parseInt(m.slice(4,6),16)];
 }
 
-async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, ambulansSebab, tbQuestions, auditLabel, totalMarks, nonTBTotal, percentage, isReaudit }) {
+async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, ambulansSebab, tbQuestions, auditLabel, totalMarks, nonTBTotal, percentage, isReaudit, isTrial, level }) {
 
   await ensurePdfLibs();
   const { jsPDF } = window.jspdf;
@@ -37,7 +37,7 @@ async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, am
   doc.text((auditLabel || "SENARAI SEMAK AUDIT").toUpperCase(), M, 48);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9.5);
-  doc.text("Jabatan Kesihatan Negeri Kedah" + (isReaudit ? "  |  RE-AUDIT" : ""), M, 62);
+  doc.text("Jabatan Kesihatan Negeri Kedah" + (isReaudit ? "  |  RE-AUDIT" : "") + (level === "jkn" ? "  |  PERINGKAT JKN" : ""), M, 62);
   doc.setDrawColor(11, 79, 92); doc.setLineWidth(1.2);
   doc.line(M, 70, W - M, 70);
 
@@ -174,11 +174,19 @@ async function generateAuditPdf({ header, answers, ringkasan, ambulansStatus, am
   const pageCount = doc.internal.getNumberOfPages();
   for (let p = 1; p <= pageCount; p++) {
     doc.setPage(p);
+    if (isTrial) { // stamp every page so a practice copy can never pass as an official record
+      const Wp = doc.internal.pageSize.getWidth(), Hp = doc.internal.pageSize.getHeight();
+      doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(200,120,0);
+      doc.text("SALINAN PERCUBAAN - BUKAN REKOD RASMI", Wp - M, 30, { align: "right" });
+      try { doc.saveGraphicsState(); doc.setGState(new doc.GState({ opacity: 0.09 })); doc.setFontSize(78); doc.setTextColor(200,120,0);
+        doc.text("PERCUBAAN", Wp / 2, Hp / 2, { align: "center", angle: 40 }); doc.restoreGraphicsState(); } catch (e) {}
+      doc.setFont("helvetica","normal");
+    }
     doc.setFontSize(7.5); doc.setTextColor(160,160,160);
     doc.text(`Halaman ${p}/${pageCount}  |  Dijana automatik ${new Date().toLocaleString("ms-MY")}`,
       M, doc.internal.pageSize.getHeight()-14);
   }
 
-const filename = [slugForFilename(header.klinik), slugForFilename(header.namaPPP), header.tarikhAudit].join("-") + ".pdf";
+const filename = (isTrial ? "PERCUBAAN-" : "") + [slugForFilename(header.klinik), slugForFilename(header.namaPPP), header.tarikhAudit].join("-") + ".pdf";
   doc.save(filename);
 }
