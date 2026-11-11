@@ -1,5 +1,6 @@
-/* dashboard.js v2 — skeleton loading, lazy animated charts, click-to-view detail with question text.
- * Needs backend Code_dashboard.gs v2 (lite + getAuditDetail); degrades gracefully on the old one. */
+/* dashboard.js v4 — skeleton loading, lazy animated charts, column filters,
+ * click-to-view detail with real question text + resilient photo loading.
+ * Works with the new Code_dashboard.gs (getAuditDetail / getPhotos) and degrades gracefully on the old one. */
 (function () {
   window.Api = window.Api || {};
   const A = window.Api;
@@ -18,9 +19,33 @@ const esc = v => Api.escapeHtml(v);
 const REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const parseDmy = s => { const m = String(s || "").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date(s); };
 const katColor = k => (KATEGORI_SCALE.find(t => t.label === k) || {}).color || "#888";
+const isUnknownAction = e => /ACTION_TIDAK_DIKENALI/.test(String((e && e.message) || e));
 const CHART_URL = "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js";
 let chartLib; const loadChartLib = () => chartLib || (chartLib = loadScript(CHART_URL));
-window.addEventListener("load", () => setTimeout(loadChartLib, 300)); // preload while user types PIN
+window.addEventListener("load", () => setTimeout(() => loadChartLib().catch(() => {}), 300)); // preload while user types PIN
+
+/* ── Question text lookup ───────────────────────────────────────────
+ * questions-data.js (ambulans) is already loaded by the page. questions-data2.js (kecemasan) ALSO declares
+ * `const AUDIT_SECTIONS`, so it is fetched and evaluated in an isolated function scope instead of a 2nd <script>. */
+let QMAP = null, qPromise = null;
+const tidy = s => String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+function indexSections(sections) {
+  const m = {};
+  (sections || []).forEach(sec => sec.questions.forEach(q => { m[q.no] = { text: tidy(q.text), code: sec.code, title: tidy(sec.title) }; }));
+  return m;
+}
+function loadQuestions() {
+  return qPromise || (qPromise = (async () => {
+    const map = { ambulans: indexSections(typeof AUDIT_SECTIONS !== "undefined" ? AUDIT_SECTIONS : []), kecemasan: {} };
+    try {
+      const txt = await (await fetch("assets/js/questions-data2.js")).text();
+      map.kecemasan = indexSections(new Function(txt + "\n;return AUDIT_SECTIONS;")());
+    } catch (e) { console.warn("Soalan kecemasan gagal dimuat:", e.message); }
+    return (QMAP = map);
+  })());
+}
+const qInfo = (type, no) => ((QMAP && QMAP[type]) || {})[no] || null;
+const wrapText = (s, n) => { const out = []; let line = ""; tidy(s).split(" ").forEach(w => { if ((line + " " + w).trim().length > (n || 60)) { out.push(line); line = w; } else line = (line + " " + w).trim(); }); if (line) out.push(line); return out; };
 
 /* ── PIN gate ───────────────────────────────────────────────────── */
 (function () {
@@ -40,19 +65,27 @@ window.addEventListener("load", () => setTimeout(loadChartLib, 300)); // preload
         if (!res.success) throw new Error(res.error || "PIN_SALAH");
         RAW = res.data; SESSION_PIN = pin;
       });
-      $("pin-gate").remove();
-      $("dashboard-content").style.display = "block";
-      showSkeletons(); setupFilters(); initLazyCharts();
-      await loadChartLib();
-      switchLevel("daerah");
-      loadDetailsInBackground();
     } catch (err) {
       const m = String(err.message);
       errEl.textContent = m === "PIN_SALAH" ? "PIN salah. Sila cuba lagi." : m === "TERLALU_BANYAK_CUBAAN" ? "Terlalu banyak cubaan. Cuba lagi dalam 10 minit." : "Ralat: " + m;
       errEl.style.display = "block"; digits.forEach(d => d.value = ""); digits[0].focus();
+      return;
     }
+    startDashboard(); // separate from the PIN try/catch so a render error is never reported as "PIN salah"
   });
 })();
+
+async function startDashboard() {
+  $("pin-gate").remove();
+  $("dashboard-content").style.display = "block";
+  try {
+    showSkeletons(); setupFilters(); wireTableFilters(); initLazyCharts();
+    loadQuestions();
+    try { await loadChartLib(); } catch (_) { toast("Carta tidak dapat dimuatkan. Semak sambungan internet.", "error"); }
+    switchLevel("daerah");
+    loadDetailsInBackground();
+  } catch (err) { console.error(err); toast("Ralat paparan: " + err.message, "error"); }
+}
 
 /* ── Skeletons ──────────────────────────────────────────────────── */
 function showSkeletons() {
@@ -80,7 +113,6 @@ function drawChart(k) {
   if (k === "failpoints" && DETAILS_STATE !== "done") { card.classList.add("is-loading"); return; }
   CHART_DEFS[k].fn(LATEST); card.classList.remove("is-loading");
 }
-const ANIM = REDUCED ? false : { duration: 900, easing: "easeOutQuart" };
 const barAnim = REDUCED ? false : { duration: 800, easing: "easeOutQuart", delay: c => (c.type === "data" && c.mode === "default" ? c.dataIndex * 70 : 0) };
 function destroyChart(k) { if (CHARTS[k]) { CHARTS[k].destroy(); delete CHARTS[k]; } }
 
@@ -102,7 +134,7 @@ function renderKategoriChart(subs) {
       plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } } } } });
 }
 function renderTrendChart(subs) {
-  const sorted = [...subs].sort((a, b) => parseDmy(a.tarikhAudit) - parseDmy(b.tarikhAudit)); // FIX: dd/mm/yyyy parsing
+  const sorted = [...subs].sort((a, b) => parseDmy(a.tarikhAudit) - parseDmy(b.tarikhAudit)); // dd/mm/yyyy-aware sort
   destroyChart("trend");
   CHARTS.trend = new Chart($("chart-trend"), { type: "line",
     data: { labels: sorted.map(s => s.tarikhAudit), datasets: [{ label: "% Markah", data: sorted.map(s => Number(s.percentage)), borderColor: "#F2A93B", backgroundColor: "#F2A93B33", fill: true, tension: 0.35, pointRadius: 3 }] },
@@ -111,7 +143,7 @@ function renderTrendChart(subs) {
 }
 function renderFailpointsChart(subs) {
   const ids = new Set(subs.map(s => s.submissionId)), counts = {};
-  RAW.details.forEach(d => { // FIX: key by type+question so ambulans Q5 and kecemasan Q5 are not merged
+  RAW.details.forEach(d => { // key by type+question so ambulans Q5 and kecemasan Q5 are not merged
     if (!ids.has(d.submissionId) || d.penilaian !== "TIDAK") return;
     const k = d.auditType + "|" + d.qNo; counts[k] = (counts[k] || 0) + 1;
   });
@@ -120,21 +152,29 @@ function renderFailpointsChart(subs) {
   destroyChart("failpoints");
   CHARTS.failpoints = new Chart($("chart-failpoints"), { type: "bar",
     data: { labels: top.map(([k]) => lab(k)), datasets: [{ label: "Bilangan Tidak", data: top.map(([, n]) => n), backgroundColor: "#C0392B", borderRadius: 6 }] },
-    options: { indexAxis: "y", animation: barAnim, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } } });
+    options: { indexAxis: "y", animation: barAnim,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => { // hover shows the real question text
+        const [t, n] = top[items[0].dataIndex][0].split("|"), q = qInfo(t, n);
+        return q ? wrapText(q.code + n + ". " + q.text, 55) : items[0].label; } } } },
+      scales: { x: { beginAtZero: true } } } });
 }
-async function loadDetailsBackground() {}
+
+/* Bulk details (all rows of all audits) — only needed for the "Soalan Paling Kerap Gagal" chart and as a fallback for old backends. */
+let bulkPromise = null;
+function ensureBulkDetails() {
+  if (RAW.details && RAW.details.length) return Promise.resolve();
+  return bulkPromise || (bulkPromise = Api.gasPost("getDashboardData", { pin: SESSION_PIN })
+    .then(res => { if (!res.success) throw new Error(res.error); RAW.details = res.data.details || []; })
+    .finally(() => { bulkPromise = null; }));
+}
 async function loadDetailsInBackground() {
-  if (RAW.details && RAW.details.length) { DETAILS_STATE = "done"; drawChart("failpoints"); return; }
   DETAILS_STATE = "loading";
-  try {
-    const res = await Api.gasPost("getDashboardData", { pin: SESSION_PIN });
-    if (!res.success) throw new Error(res.error);
-    RAW.details = res.data.details || [];
-  } catch (e) { console.warn("Butiran gagal dimuat:", e.message); }
+  await loadQuestions();
+  try { await ensureBulkDetails(); } catch (e) { console.warn("Butiran gagal dimuat:", e.message); }
   DETAILS_STATE = "done"; drawChart("failpoints");
 }
 
-/* ── Filters ────────────────────────────────────────────────────── */
+/* ── Top filters (these also drive KPIs + charts) ───────────────── */
 function setupFilters() {
   const dSel = $("filter-daerah"), kSel = $("filter-klinik"), tSel = $("filter-audit-type");
   const opts = (first, list) => `<option value="">${first}</option>` + list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
@@ -194,45 +234,113 @@ function renderKpis(subs) {
   renderSpectrum($("dashboard-spectrum"), avg);
 }
 
-/* ── Audit table (whole row clickable) ──────────────────────────── */
-function renderTable(subs) {
-  const sorted = [...subs].sort((a, b) => parseDmy(b.tarikhAudit) - parseDmy(a.tarikhAudit)); // FIX: date sort
+/* ── Audit table: a filter for EVERY column + whole-row click ───── */
+const TF = { tarikh: "", daerah: "", klinik: "", ppp: "", type: "", min: "", max: "", kat: "" };
+const TF_SELECTS = { tarikh: "tf-tarikh", daerah: "tf-daerah", klinik: "tf-klinik", type: "tf-type", kat: "tf-kat" };
+const TF_TYPED = { ppp: "tf-ppp", min: "tf-min", max: "tf-max" };
+const MONTHS = ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ogo", "Sep", "Okt", "Nov", "Dis"];
+const monthKey = s => { const d = parseDmy(s.tarikhAudit); return isNaN(d) ? "" : String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); };
+const monthLabel = k => { const [m, y] = k.split("/"); return MONTHS[+m - 1] + " " + y; };
+const normTxt = v => String(v == null ? "" : v).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+
+function applyTableFilters(subs) {
+  const q = normTxt(TF.ppp).trim(), min = TF.min === "" ? null : +TF.min, max = TF.max === "" ? null : +TF.max;
+  return subs.filter(s => {
+    const pct = Number(s.percentage) || 0;
+    return (!TF.tarikh || monthKey(s) === TF.tarikh) && (!TF.daerah || s.daerah === TF.daerah) && (!TF.klinik || s.klinik === TF.klinik)
+      && (!q || normTxt(s.namaPPP).includes(q)) && (!TF.type || (s.auditLabel || s.auditType) === TF.type)
+      && (min === null || pct >= min) && (max === null || pct <= max) && (!TF.kat || s.kategori === TF.kat);
+  });
+}
+/* Dropdown options come from the rows currently in scope (level + top filters); a chosen value that is no longer valid is cleared. */
+function refreshTableFilterOptions(subs) {
+  const uniq = f => [...new Set(subs.map(f).filter(Boolean))];
+  const lists = {
+    tarikh: uniq(monthKey).sort((a, b) => { const [am, ay] = a.split("/"), [bm, by] = b.split("/"); return (by - ay) || (bm - am); }).map(k => [k, monthLabel(k)]),
+    daerah: uniq(s => s.daerah).sort().map(v => [v, v]),
+    klinik: uniq(s => s.klinik).sort().map(v => [v, v]),
+    type: uniq(s => s.auditLabel || s.auditType).sort().map(v => [v, v]),
+    kat: KATEGORI_SCALE.map(t => t.label).filter(l => subs.some(s => s.kategori === l)).map(v => [v, v])
+  };
+  Object.entries(TF_SELECTS).forEach(([key, id]) => {
+    const el = $(id);
+    if (TF[key] && !lists[key].some(([v]) => v === TF[key])) TF[key] = "";
+    el.innerHTML = '<option value="">Semua</option>' + lists[key].map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+    el.value = TF[key];
+  });
+}
+function wireTableFilters() {
+  const onChange = () => { TABLE_LIMIT = 25; renderTable(LATEST, true); };
+  Object.entries(TF_SELECTS).forEach(([key, id]) => $(id).addEventListener("change", e => { TF[key] = e.target.value; onChange(); }));
+  let t; Object.entries(TF_TYPED).forEach(([key, id]) => $(id).addEventListener("input", e => { TF[key] = e.target.value; clearTimeout(t); t = setTimeout(onChange, 150); }));
+  $("tf-clear").addEventListener("click", () => {
+    Object.keys(TF).forEach(k => TF[k] = "");
+    Object.values(TF_TYPED).forEach(id => $(id).value = "");
+    Object.values(TF_SELECTS).forEach(id => $(id).value = "");
+    onChange();
+  });
+}
+function renderTable(subs, keepOptions) {
+  if (!keepOptions) refreshTableFilterOptions(subs);
+  const filtered = applyTableFilters(subs);
+  const sorted = [...filtered].sort((a, b) => parseDmy(b.tarikhAudit) - parseDmy(a.tarikhAudit));
   const shown = sorted.slice(0, TABLE_LIMIT), tb = $("audit-table").querySelector("tbody");
+  const active = Object.values(TF).some(Boolean);
+  $("tf-clear").hidden = !active;
+  $("tf-count").textContent = active ? `${filtered.length} daripada ${subs.length} audit` : `${subs.length} audit`;
+  Object.entries(TF_SELECTS).forEach(([k, id]) => $(id).classList.toggle("is-set", !!TF[k]));
+  Object.entries(TF_TYPED).forEach(([k, id]) => $(id).classList.toggle("is-set", !!TF[k]));
   tb.innerHTML = shown.map(s => `<tr data-id="${esc(s.submissionId)}" tabindex="0" title="Klik untuk lihat butiran">
     <td>${esc(s.tarikhAudit || "-")}</td><td>${esc(s.daerah || "-")}</td><td>${esc(s.klinik || "-")}</td><td>${esc(s.namaPPP || "-")}</td>
-    <td><span style="font-size:11px;background:var(--color-primary-tint);color:var(--color-primary-dark);padding:2px 8px;border-radius:99px;">${esc(s.auditLabel || s.auditType || "-")}</span></td>
+    <td><span class="type-pill">${esc(s.auditLabel || s.auditType || "-")}</span></td>
     <td>${s.totalMarks || 0}/${s.nonTBTotal || "-"} (${s.percentage || 0}%)</td>
     <td><span class="kat-dot" style="background:${katColor(s.kategori)}"></span>${esc(s.kategori || "-")}</td><td>🔍</td></tr>`).join("")
-    || `<tr><td colspan="8" class="empty-state">Tiada audit dijumpai.</td></tr>`;
+    || `<tr><td colspan="8" class="empty-state">Tiada audit dijumpai${active ? " untuk penapis ini" : ""}.</td></tr>`;
   let more = $("more-btn"); if (more) more.remove();
   if (sorted.length > shown.length) {
     more = document.createElement("button"); more.id = "more-btn"; more.className = "btn btn-ghost more-btn";
     more.textContent = `Papar lagi (${sorted.length - shown.length})`;
-    more.onclick = () => { TABLE_LIMIT += 25; renderTable(subs); };
+    more.onclick = () => { TABLE_LIMIT += 25; renderTable(subs, true); };
     $("audit-table").closest(".table-wrap").after(more);
   }
 }
 document.addEventListener("click", e => { const tr = e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); });
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") { const tr = e.target.closest && e.target.closest("#audit-table tbody tr[data-id]"); if (tr) openDetail(tr.dataset.id); }
-  if (e.key === "Escape") { const lb = $("lightbox"); if (lb) lb.remove(); else { const m = $("detail-modal"); if (m) m.remove(); } }
+  if (e.key === "Escape") { const lb = $("lightbox"); if (lb) lb.remove(); else closeDetail(); }
 });
 
-/* ── Detail modal: full-width question rows, fetched on demand ──── */
+/* ── Detail modal ───────────────────────────────────────────────── */
 const NILAI = { YA: ["Ya", "ya"], TIDAK: ["Tidak", "tidak"], TIDAK_BERKENAAN: ["T/B", "tb"] };
 const TINDAK = { PERLU: "Perlu", TIDAK_PERLU: "Tidak perlu", TIDAK_BERKENAAN: "T/B" };
+let BACKEND_DETAIL = true; // flips to false once the backend says it doesn't know getAuditDetail (old Code_dashboard.gs)
 
 async function fetchDetail(sub) {
   if (DETAIL_CACHE.has(sub.submissionId)) return DETAIL_CACHE.get(sub.submissionId);
-  let rows;
-  try {
-    const res = await Api.gasPost("getAuditDetail", { pin: SESSION_PIN, submissionId: sub.submissionId, auditType: sub.auditType });
-    if (!res.success) throw new Error(res.error);
-    rows = res.data;
-  } catch (e) { // fallback (old backend): rows without question text
-    rows = RAW.details.filter(d => d.submissionId === sub.submissionId).map(d => ({ ...d, qNo: Number(d.qNo), text: "", sectionTitle: "" })).sort((a, b) => a.qNo - b.qNo);
+  await loadQuestions();
+  let rows = null;
+  if (BACKEND_DETAIL) {
+    try {
+      const res = await Api.gasPost("getAuditDetail", { pin: SESSION_PIN, submissionId: sub.submissionId, auditType: sub.auditType });
+      if (!res.success) throw new Error(res.error);
+      rows = res.data;
+    } catch (e) { if (isUnknownAction(e)) BACKEND_DETAIL = false; else console.warn("getAuditDetail:", e.message); }
   }
-  DETAIL_CACHE.set(sub.submissionId, rows); return rows;
+  if (!rows) { // old backend → use the bulk rows
+    try { await ensureBulkDetails(); } catch (_) {}
+    rows = (RAW.details || []).filter(d => d.submissionId === sub.submissionId);
+  }
+  // Always attach question text + section title from the local question files (backend text wins if present)
+  rows = rows.map(d => { const q = qInfo(sub.auditType, Number(d.qNo)) || {};
+    return { ...d, qNo: Number(d.qNo), section: d.section || q.code || "", text: d.text || q.text || "", sectionTitle: d.sectionTitle || q.title || "" }; })
+    .sort((a, b) => a.qNo - b.qNo);
+  if (rows.length) DETAIL_CACHE.set(sub.submissionId, rows);
+  return rows;
+}
+function photoHtml(u) {
+  const id = Api.driveId(u);
+  if (!id) return /^https?:\/\//i.test(u) ? `<a class="ph ph--fail" href="${esc(u)}" target="_blank" rel="noopener" title="Buka foto">📷</a>` : "";
+  return `<span class="ph ph--wait"><img referrerpolicy="no-referrer" alt="Foto" data-id="${esc(id)}" data-src="${esc(Api.driveThumb(u, 300))}" data-alt="${esc(Api.driveAlt(u, 300))}"></span>`;
 }
 function detailRowsHtml(rows) {
   if (!rows.length) return '<div class="empty-state">Tiada data soalan.</div>';
@@ -242,31 +350,97 @@ function detailRowsHtml(rows) {
     const [lbl, cls] = NILAI[r.penilaian] || ["-", "tb"];
     const photos = String(r.photoURLs || "").split(",").map(u => u.trim()).filter(Boolean);
     h += `<div class="dq dq--${cls}"><div class="dq__text"><span class="dq__no">${esc(r.section)}${r.qNo}</span><div>${esc(r.text || "Soalan " + r.qNo)}</div></div>
-      <div class="dq__meta"><span class="pill pill--${cls}">${lbl}</span>${r.tindakSusul ? `<span>Tindak susul: <b>${esc(TINDAK[r.tindakSusul] || r.tindakSusul)}</b></span>` : ""}${r.catatan ? `<div class="dq__note">${esc(r.catatan)}</div>` : ""}</div>
-      ${photos.length ? `<div class="dq__photos">${photos.map(u => `<img loading="lazy" referrerpolicy="no-referrer" alt="Foto" src="${esc(Api.driveThumb(u, 300))}" data-alt="${esc(Api.driveAlt(u, 300))}" data-full="${esc(Api.driveThumb(u, 1400))}">`).join("")}</div>` : ""}</div>`;
+      <div class="dq__meta"><span class="pill pill--${cls}">${lbl}</span>${r.tindakSusul && r.tindakSusul !== "TIDAK_BERKENAAN" ? `<span>Tindak susul: <b>${esc(TINDAK[r.tindakSusul] || r.tindakSusul)}</b></span>` : ""}${r.catatan ? `<div class="dq__note">${esc(r.catatan)}</div>` : ""}</div>
+      ${photos.length ? `<div class="dq__photos">${photos.map(photoHtml).join("")}</div>` : ""}</div>`;
   });
   return h;
 }
+const countsLine = rows => {
+  const n = k => rows.filter(r => r.penilaian === k).length, ph = rows.reduce((s, r) => s + String(r.photoURLs || "").split(",").filter(x => x.trim()).length, 0);
+  return `Ya ${n("YA")} · Tidak ${n("TIDAK")} · T/B ${n("TIDAK_BERKENAAN")} · 📷 ${ph} foto`;
+};
+
+/* Photo loading chain (per image):
+ *   Drive thumbnail → googleusercontent → backend getPhotos (works even when the Drive file is NOT shared) → "Buka" link.
+ * Once the direct routes have failed for one photo, the rest skip straight to the backend, and backend calls are batched. */
+const PHOTO_CACHE = new Map(); // `${id}|${size}` -> data URL
+const PQ = new Set(); let pqTimer = 0, DIRECT_OK = null, BACKEND_PHOTO = true;
+
+function hydratePhotos(root) {
+  root.querySelectorAll(".ph img").forEach(img => { if (DIRECT_OK === false) queueBackend(img); else img.src = img.dataset.src; });
+}
+function photoFail(img) {
+  const wrap = img.closest(".ph"); if (!wrap) return;
+  wrap.className = "ph ph--fail";
+  wrap.innerHTML = `<a href="https://drive.google.com/file/d/${esc(img.dataset.id)}/view" target="_blank" rel="noopener" title="Foto tidak dapat dipapar — klik untuk buka di Drive">📷<small>Buka</small></a>`;
+}
+function onPhotoError(img) {
+  if (img.dataset.mode === "backend") return photoFail(img); // even the backend copy failed to decode
+  if (!img.dataset.f) { img.dataset.f = "1"; img.src = img.dataset.alt; return; }
+  if (DIRECT_OK === null) DIRECT_OK = false;
+  queueBackend(img);
+}
+function onPhotoLoad(img) {
+  const w = img.closest(".ph"); if (w) w.classList.remove("ph--wait");
+  if (DIRECT_OK === null && img.dataset.mode !== "backend") DIRECT_OK = true;
+}
+function queueBackend(img) {
+  if (!BACKEND_PHOTO) return photoFail(img);
+  img.dataset.mode = "backend"; PQ.add(img);
+  clearTimeout(pqTimer); pqTimer = setTimeout(flushPhotoQueue, 60);
+}
+async function backendPhotos(ids, size) {
+  const need = ids.filter(id => !PHOTO_CACHE.has(id + "|" + size));
+  if (!need.length) return;
+  const res = await Api.gasPost("getPhotos", { pin: SESSION_PIN, ids: need, size });
+  if (!res.success) throw new Error(res.error || "getPhotos gagal");
+  Object.entries(res.data || {}).forEach(([id, d]) => { if (d) PHOTO_CACHE.set(id + "|" + size, d); });
+}
+async function flushPhotoQueue() {
+  const imgs = [...PQ].filter(i => i.isConnected); PQ.clear();
+  const byId = {}; imgs.forEach(i => (byId[i.dataset.id] = byId[i.dataset.id] || []).push(i));
+  const ids = Object.keys(byId), STEP = 6;
+  for (let k = 0; k < ids.length; k += STEP) {
+    const chunk = ids.slice(k, k + STEP);
+    try { await backendPhotos(chunk, "thumb"); }
+    catch (e) { if (isUnknownAction(e)) BACKEND_PHOTO = false; console.warn("Foto:", e.message); }
+    chunk.forEach(id => byId[id].forEach(i => { const d = PHOTO_CACHE.get(id + "|thumb"); d ? (i.src = d) : photoFail(i); }));
+    if (!BACKEND_PHOTO) { ids.slice(k + STEP).forEach(id => byId[id].forEach(photoFail)); break; }
+  }
+}
+function openLightbox(img) {
+  const id = img.dataset.id, lb = document.createElement("div"); lb.className = "lb"; lb.id = "lightbox";
+  const big = document.createElement("img"); big.alt = "Foto"; big.referrerPolicy = "no-referrer"; big.src = img.currentSrc || img.src; // thumbnail first, upgrade when the big one arrives
+  lb.appendChild(big); lb.onclick = () => lb.remove(); document.body.appendChild(lb);
+  const upgrade = d => { if (d && lb.isConnected) big.src = d; };
+  const viaBackend = () => backendPhotos([id], "full").then(() => upgrade(PHOTO_CACHE.get(id + "|full"))).catch(() => {});
+  if (img.dataset.mode === "backend") return viaBackend();
+  const full = Api.driveThumb("https://drive.google.com/uc?id=" + id, 1400), probe = new Image();
+  probe.referrerPolicy = "no-referrer"; probe.onload = () => upgrade(full); probe.onerror = viaBackend; probe.src = full;
+}
+
+function closeDetail() { const m = $("detail-modal"); if (m) m.remove(); document.body.style.overflow = ""; }
 async function openDetail(id) {
   const sub = RAW.submissions.find(s => s.submissionId === id); if (!sub) return;
-  const old = $("detail-modal"); if (old) old.remove();
+  closeDetail();
   const rg = [["Kelebihan", sub.kelebihan], ["Kekurangan", sub.kekurangan], ["Cadangan", sub.cadangan], ["Penambahbaikan", sub.penambahbaikan]].filter(x => x[1]);
-  const m = document.createElement("div"); m.className = "dm"; m.id = "detail-modal";
+  const m = document.createElement("div"); m.className = "dm"; m.id = "detail-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
   m.innerHTML = `<div class="dm__box"><div class="dm__head"><div><div class="dm__title">${esc(sub.klinik)} · ${esc(sub.daerah)}</div>
     <div class="dm__sub">${esc(sub.tarikhAudit)} | ${esc(sub.namaPPP)} | ${esc(sub.auditLabel || sub.auditType)}</div></div><button class="dm__x" aria-label="Tutup">×</button></div>
     <div class="dm__stats"><span class="dm__chip">Markah: <b>${sub.totalMarks}/${sub.nonTBTotal} (${sub.percentage}%)</b></span>
     <span class="dm__chip"><span class="kat-dot" style="background:${katColor(sub.kategori)}"></span><b>${esc(sub.kategori)}</b></span></div>
+    <div class="dm__legend" id="dm-legend">&nbsp;</div>
     <div class="dm__body">${rg.length ? `<details class="dm__sum"><summary>Ringkasan laporan audit</summary>${rg.map(([k, v]) => `<p><b>${k}:</b> ${esc(v)}</p>`).join("")}</details>` : ""}
     <div id="dm-rows">${'<div class="dq-skel"><div class="skel" style="width:90%"></div><div class="skel" style="width:60%"></div><div class="skel" style="width:30%;height:20px"></div></div>'.repeat(6)}</div></div></div>`;
   m.addEventListener("click", e => {
-    if (e.target === m || e.target.closest(".dm__x")) m.remove();
-    const img = e.target.closest(".dq__photos img");
-    if (img) { const lb = document.createElement("div"); lb.className = "lb"; lb.id = "lightbox"; lb.innerHTML = `<img src="${img.dataset.full}" referrerpolicy="no-referrer" alt="Foto">`; lb.onclick = () => lb.remove(); document.body.appendChild(lb); }
+    if (e.target === m || e.target.closest(".dm__x")) return closeDetail();
+    const img = e.target.closest(".dq__photos .ph img"); if (img) openLightbox(img);
   });
-  m.addEventListener("error", e => { const t = e.target; if (t.tagName !== "IMG") return; if (!t.dataset.f) { t.dataset.f = 1; t.src = t.dataset.alt; } else t.replaceWith(Object.assign(document.createElement("span"), { textContent: "📷", title: "Foto tidak dapat dipapar" })); }, true);
-  document.body.appendChild(m);
+  m.addEventListener("error", e => { if (e.target.tagName === "IMG" && e.target.closest(".ph")) onPhotoError(e.target); }, true);
+  m.addEventListener("load", e => { if (e.target.tagName === "IMG" && e.target.closest(".ph")) onPhotoLoad(e.target); }, true);
+  document.body.appendChild(m); document.body.style.overflow = "hidden";
   const rows = await fetchDetail(sub), box = $("dm-rows");
-  if (box && document.body.contains(m)) box.innerHTML = detailRowsHtml(rows);
+  if (box && m.isConnected) { box.innerHTML = detailRowsHtml(rows); $("dm-legend").textContent = rows.length ? countsLine(rows) : ""; hydratePhotos(box); }
 }
 window.showDetail = openDetail; // backward compat
 
