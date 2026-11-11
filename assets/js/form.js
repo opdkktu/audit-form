@@ -30,7 +30,7 @@
 //     CARA EDIT: Salin nombor soalan yang bersesuaian ke dalam array bawah.
 //     Contoh siap guna: const TB_WHEN_TIADA = [1,3,4,5,6,8,9,11,13,15,16,17];
 // ─────────────────────────────────────────────────────────────────────────
-window.APP_CONFIG.GAS_URL = window.APP_CONFIG.FORM1_GAS_URL;
+window.APP_CONFIG.GAS_URL = AuditMode.url(1);
 const TB_WHEN_TIADA = [1,5,6,8,9,15,16,17];
 const TB_VAL = "TIDAK_BERKENAAN";
 
@@ -75,6 +75,7 @@ async function init() {
   document.getElementById("auditor-badge").textContent =
     STATE.auditType === "reaudit" ? "Re-Audit (Penyelia)" : "Audit Teknikal";
   STATE.header.tarikhAudit = todayISO();
+  AuditMode.applyBanner();
 
   AUDIT_SECTIONS.forEach(sec => sec.questions.forEach(q => {
     STATE.answers[q.no] = { penilaian:null, tindakSusul:null, catatan:"", photos:[] };
@@ -429,6 +430,7 @@ const UploadQueue = (() => {
 })();
 
 async function uploadPhotoInBackground(photo, qNo) {
+  if (AuditMode.trial) { photo.status = "done"; refreshThumbs(qNo); return; } // trial: never touch Drive
   photo.status = "uploading"; refreshThumbs(qNo);
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -665,6 +667,7 @@ async function submitAudit() {
   try {
     const nonTBTotal = Object.keys(STATE.answers).filter(no => !isTB(Number(no))).length;
     const result = await Loading.withLoading("Menghantar audit & memuat naik foto...", async () => {
+      if (AuditMode.trial) { await AuditMode.delay(700); return AuditMode.trialResult(STATE.answers); } // trial: nothing is sent
       const payload = {
         auditType: STATE.auditType,
         daerah: STATE.header.daerah,
@@ -690,7 +693,7 @@ async function submitAudit() {
     });
     STATE.result = result;
     // fire-and-forget: server builds the PDF and emails it (does not delay the result page)
-    if (STATE.header.emelAuditor && result.submissionId) {
+    if (!AuditMode.trial && STATE.header.emelAuditor && result.submissionId) {
       Api.gasPost("emailAudit", { submissionId: result.submissionId })
         .then(r => { if (r && r.success) toast("📎 PDF laporan dihantar ke emel anda.", "ok"); })
         .catch(() => { /* will be retried by the pending-email job */ });
@@ -708,7 +711,8 @@ function renderResultStep() {
 
   c.insertAdjacentHTML("beforeend", `
     <div class="card">
-      <h2 style="text-align:center;margin-bottom:14px;">Audit Berjaya Dihantar ✅</h2>
+      <h2 style="text-align:center;margin-bottom:14px;">${AuditMode.trial ? "Percubaan Selesai 🧪" : "Audit Berjaya Dihantar ✅"}</h2>
+      ${AuditMode.trial ? '<p style="text-align:center;font-size:13px;color:var(--color-text-muted);margin:-6px 0 12px;">Mod percubaan — data <b>tidak</b> disimpan. Anda masih boleh muat turun PDF.</p>' : ""}
       <div class="score-hero">
         <div class="score-hero__value">${r.totalMarks}/${r.nonTBTotal||TOTAL_QUESTIONS}</div>
         <div class="score-hero__sub">${r.percentage}% markah</div>
@@ -761,7 +765,7 @@ launchFireworks();
     if (!selectedStar){ toast("Sila pilih bintang dahulu.","error"); return; }
     try {
       await Loading.withLoading("Menghantar maklum balas...", async()=>{
-        await Api.gasPost("submitRating",{ submissionId:r.submissionId, rating:selectedStar, comment:document.getElementById("rating-comment").value.trim() });
+        if (!AuditMode.trial) await Api.gasPost("submitRating",{ submissionId:r.submissionId, rating:selectedStar, comment:document.getElementById("rating-comment").value.trim() });
       });
       document.getElementById("btn-rate").style.display="none";
       document.getElementById("rating-done").style.display="block";
@@ -782,7 +786,8 @@ launchFireworks();
           totalMarks: r.totalMarks,
           nonTBTotal: r.nonTBTotal || TOTAL_QUESTIONS,
           percentage: r.percentage,
-          isReaudit: STATE.auditType==="reaudit"
+          isReaudit: STATE.auditType==="reaudit",
+          isTrial: AuditMode.trial, level: AuditMode.level
         });
       });
     } catch(err){ toast("Gagal menjana PDF: "+err.message,"error"); }
