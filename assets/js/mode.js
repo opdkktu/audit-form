@@ -3,7 +3,7 @@
  *
  *  • Level  : "daerah" (default) or "jkn". JKN needs a PIN, which is verified by the JKN backend itself
  *             and sent again with every submit/upload (the backend re-checks it — hiding a button is not security).
- *             JKN audits go to separate backends/sheets, so their marks never mix with district marks.
+ *             Same script + same URL: the backend saves JKN audits in separate tabs (Audits_JKN …), so marks never mix.
  *  • Trial  : forms behave normally but NOTHING is sent to the database (no submit, no photo upload, no email,
  *             no rating). The result page and the PDF still work; the PDF is stamped as a trial copy.
  *  State lives in sessionStorage → it is forgotten when the tab closes, so a shared phone falls back to Daerah.
@@ -13,7 +13,7 @@
   const get = k => { try { return sessionStorage.getItem(k); } catch (e) { return null; } };
   const set = (k, v) => { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch (e) {} };
   const CFG = () => window.APP_CONFIG || {};
-  const hasJkn = () => !!(CFG().FORM1_JKN_GAS_URL && CFG().FORM2_JKN_GAS_URL);
+  const hasJkn = () => !!CFG().FORM1_GAS_URL;
 
   const M = {
     hasJkn,
@@ -22,11 +22,11 @@
     get trial() { return get(K.trial) === "1"; },
     setTrial(on) { set(K.trial, on ? "1" : null); },
     useDaerah() { set(K.level, null); set(K.pin, null); },
-    /** Backend URL for form 1 (ambulans) or 2 (kecemasan) at the current level. */
-    url(n) { return M.level === "jkn" ? CFG()["FORM" + n + "_JKN_GAS_URL"] : CFG()["FORM" + n + "_GAS_URL"]; },
-    /** Ask the JKN backend whether the PIN is right; on success remember JKN level for this tab. */
+    /** Backend URL for form 1 (ambulans) or 2 (kecemasan). */
+    url(n) { return CFG()["FORM" + n + "_GAS_URL"]; }, // one URL per form; level travels in the request body
+    /** Ask the backend whether the PIN is right; on success remember JKN level for this tab. */
     async verifyJkn(pin) {
-      const url = CFG().FORM1_JKN_GAS_URL;
+      const url = CFG().FORM1_GAS_URL;
       if (!url) throw new Error("JKN_BELUM_DISEDIAKAN");
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "verifyPin", token: CFG().SHARED_TOKEN || "", pin }) });
@@ -129,8 +129,8 @@
       d.classList.toggle("is-on", M.level === "daerah"); j.classList.toggle("is-on", M.level === "jkn");
       d.setAttribute("aria-pressed", M.level === "daerah"); j.setAttribute("aria-pressed", M.level === "jkn");
       t.checked = M.trial;
-      if (!M.hasJkn()) { j.disabled = true; note.textContent = "Peringkat JKN belum disediakan (URL JKN belum ditetapkan dalam config.js)."; }
-      else note.textContent = M.trial ? "Mod percubaan AKTIF — data tidak akan disimpan." : M.level === "jkn" ? "Peringkat JKN aktif — data disimpan di lembaran JKN." : "";
+      if (!M.hasJkn()) { j.disabled = true; note.textContent = "Peringkat JKN tidak tersedia (URL borang belum ditetapkan)."; }
+      else note.textContent = M.trial ? "Mod percubaan AKTIF — data tidak akan disimpan." : M.level === "jkn" ? "Peringkat JKN aktif — data disimpan dalam tab JKN (berasingan)." : "";
     };
     d.onclick = () => { M.useDaerah(); paint(); };
     j.onclick = async () => { if (M.level === "jkn") return; if (await askPin()) paint(); };
