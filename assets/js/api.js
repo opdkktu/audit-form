@@ -44,7 +44,8 @@
   /** POST request (text/plain trick) — used for writes and PIN-gated reads. */
   async function gasPost(action, payload) {
     const CFG = window.APP_CONFIG || {};
-    const body = JSON.stringify(Object.assign({ action, token: CFG.SHARED_TOKEN || "" }, payload || {}));
+    const M = window.AuditMode, jkn = M && M.level === "jkn" ? { pin: M.pin, level: "jkn" } : {};
+    const body = JSON.stringify(Object.assign({ action, token: CFG.SHARED_TOKEN || "" }, jkn, payload || {}));
     const res = await fetch(CFG.GAS_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
