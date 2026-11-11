@@ -117,7 +117,8 @@ function renderInfoStep(c) {
         <div class="field-hint">Ringkasan audit akan dihantar ke emel ini selepas submit.</div>
       </div>
       <div class="field"><label>Tarikh Audit</label>
-        <input type="text" class="input-readonly" value="${todayDisplay()}" readonly>
+        <input type="date" id="f-tarikh" value="${STATE.header.tarikhAudit || todayISO()}" max="${todayISO()}" required>
+        <div class="field-hint">Lalai: hari ini. Tukar jika audit dijalankan pada tarikh lain.</div>
       </div>
     </div>
     <div class="btn-row"><button class="btn btn-primary btn-block" id="btn-next">Mula Audit →</button></div>
@@ -146,6 +147,12 @@ function renderInfoStep(c) {
     STATE.header.tempatBertugas = tempatEl.value;
   });
   document.getElementById("f-emel").addEventListener("input", e => { STATE.header.emelAuditor = e.target.value; });
+  document.getElementById("f-tarikh").addEventListener("change", e => {
+    // keep a valid date: empty or future value falls back to today
+    const v = e.target.value, t = todayISO();
+    STATE.header.tarikhAudit = (!v || v > t) ? t : v;
+    e.target.value = STATE.header.tarikhAudit;
+  });
   document.getElementById("btn-next").addEventListener("click", nextStep);
 }
 function validateInfo() {
